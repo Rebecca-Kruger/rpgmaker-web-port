@@ -702,6 +702,7 @@ def step11_deploy_to_cloudflare(project_name):
         "wrangler", "pages", "deploy", 
         WWW_DIR, 
         "--project-name", project_name,
+        "--branch", "production",
     ]
 
     print("\n   ⏳ [阶段一] 正在推送到 Cloudflare...")
