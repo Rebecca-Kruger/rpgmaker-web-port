@@ -336,6 +336,30 @@ def step2_patch_index_html():
                 if (moduleName === 'nw.gui') return window.nw;
                 return {};
             };
+
+            // 4. 提前解锁媒体上下文，避免 iOS/移动浏览器在动画 SE 首次播放时报 NotAllowedError
+            (function() {
+                let unlocked = false;
+                const tryUnlockMedia = function() {
+                    if (unlocked) return;
+                    try {
+                        if (window.WebAudio && WebAudio._context && WebAudio._context.state === 'suspended') {
+                            const result = WebAudio._context.resume();
+                            if (result && typeof result.catch === 'function') {
+                                result.catch(function() {});
+                            }
+                        }
+                    } catch (e) {}
+                    unlocked = true;
+                    unlockEvents.forEach(function(type) {
+                        document.removeEventListener(type, tryUnlockMedia, true);
+                    });
+                };
+                const unlockEvents = ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'keydown'];
+                unlockEvents.forEach(function(type) {
+                    document.addEventListener(type, tryUnlockMedia, true);
+                });
+            })();
         </script>
         """
         # 使用正则，无视大小写寻找第一个 <script，并插在它前面
