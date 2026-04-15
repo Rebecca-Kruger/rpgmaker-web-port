@@ -7,8 +7,6 @@ import sys
 import re
 import shutil
 import glob
-import hashlib
-import unicodedata
 
 # ==========================================
 # 1. 基础环境配置
@@ -23,9 +21,15 @@ VPAD_HTML_PATH = os.path.join(BASE_DIR, "vpad.html")
 # ==========================================
 # 2. 动态 CI/CD 部署配置
 # ==========================================
-GAME_NAME = sys.argv[1] if len(sys.argv) >= 2 else None
-SAVE_PREFIX = GAME_NAME.upper() + "_" if GAME_NAME else ""
-DEPLOY_DIR = os.path.join("/var/www/html/games", GAME_NAME) if GAME_NAME else ""
+if len(sys.argv) < 2:
+    print("❌ 错误：缺少游戏文件夹名称！")
+    print("💡 用法: sudo python3 pipeline.py <游戏名> [--single-deploy]")
+    sys.exit(1)
+
+GAME_NAME = sys.argv[1]
+SINGLE_DEPLOY = "--single-deploy" in sys.argv[2:]
+SAVE_PREFIX = GAME_NAME.upper() + "_"
+DEPLOY_DIR = os.path.join("/var/www/html/games", GAME_NAME)
 LOBBY_HTML_PATH = "/var/www/html/index.html"
 
 # ==========================================
@@ -39,20 +43,51 @@ CF_KV_NAMESPACE_ID = "e4f91a136fb149a0a2e52a829af77d31"
 # 核心流水线函数
 # ==========================================
 
-SAFE_RESOURCE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+def detect_game_source_dir():
+    """检测完整 PC 游戏目录，并作为 www 工作区来源。"""
+    candidates = []
+    for entry in os.listdir(BASE_DIR):
+        path = os.path.join(BASE_DIR, entry)
+        if not os.path.isdir(path):
+            continue
+        if entry in [".git", ".wrangler", "__pycache__", "www"]:
+            continue
+        if os.path.exists(os.path.join(path, "index.html")) and \
+           os.path.isdir(os.path.join(path, "js")) and \
+           os.path.isdir(os.path.join(path, "data")):
+            candidates.append(path)
 
-def ensure_game_name():
-    """确保命令行传入了游戏名。"""
-    if not GAME_NAME:
-        print("❌ 错误：缺少游戏文件夹名称！")
-        print("💡 用法: sudo python3 RPGMZ_pipline.py <游戏名>")
+    if len(candidates) == 1:
+        return candidates[0]
+    if os.path.exists(WWW_DIR):
+        return WWW_DIR
+    return None
+
+def prepare_www_workspace():
+    """将完整 PC 目录复制成标准 www 工作目录。"""
+    source_dir = detect_game_source_dir()
+    if not source_dir:
+        print("  [!] 未找到可用的游戏源目录。请提供 www 或完整 PC 游戏目录。")
         sys.exit(1)
 
-def load_plugins_manifest():
-    """读取 js/plugins.js 并返回 (路径, 前缀, 数组, 后缀)。"""
+    if os.path.abspath(source_dir) == os.path.abspath(WWW_DIR):
+        print(f"  [+] 使用现有 www 工作目录: {WWW_DIR}")
+        return
+
+    print(f"\n>>> 预处理: 从源目录构建 www 工作区...")
+    print(f"  [+] 源目录: {source_dir}")
+    if os.path.exists(WWW_DIR):
+        shutil.rmtree(WWW_DIR)
+    shutil.copytree(source_dir, WWW_DIR)
+    print(f"  [+] 已复制到工作目录: {WWW_DIR}")
+
+def patch_problematic_plugin_params():
+    """只修复当前已定位的高风险插件参数，不做全量重写。"""
+    print("\n>>> 步骤 6: 定点修复 iOS 高风险插件参数...")
     plugins_path = os.path.join(WWW_DIR, "js", "plugins.js")
     if not os.path.exists(plugins_path):
-        return None, None, None, None
+        print("  [-] 未找到 plugins.js，跳过插件参数修复。")
+        return
 
     with open(plugins_path, "r", encoding="utf-8") as f:
         content = f.read()
@@ -60,183 +95,30 @@ def load_plugins_manifest():
     start = content.find("[")
     end = content.rfind("]")
     if start == -1 or end == -1 or end < start:
-        raise ValueError("plugins.js 格式异常，未找到插件数组")
+        print("  [!] plugins.js 格式异常，跳过插件参数修复。")
+        return
 
     prefix = content[:start]
     suffix = content[end + 1:]
     plugins = json.loads(content[start:end + 1])
-    return plugins_path, prefix, plugins, suffix
-
-def save_plugins_manifest(path, prefix, plugins, suffix):
-    """将插件数组写回 js/plugins.js。"""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(prefix)
-        json.dump(plugins, f, ensure_ascii=False, indent=2)
-        f.write(suffix if suffix else ";\n")
-
-def normalize_resource_stem(stem):
-    """将资源主文件名收敛为适合网页部署的 ASCII 安全名字。"""
-    normalized = unicodedata.normalize("NFKC", stem)
-    if SAFE_RESOURCE_RE.fullmatch(normalized):
-        return normalized
-
-    ascii_hint = normalized.encode("ascii", "ignore").decode("ascii")
-    ascii_hint = re.sub(r"[^A-Za-z0-9._-]+", "_", ascii_hint)
-    ascii_hint = re.sub(r"_+", "_", ascii_hint).strip("._-")
-    if not ascii_hint:
-        ascii_hint = "asset"
-    if not ascii_hint[0].isalpha():
-        ascii_hint = "res_" + ascii_hint
-
-    digest = hashlib.sha1(stem.encode("utf-8")).hexdigest()[:8]
-    return f"{ascii_hint}_{digest}"
-
-def apply_text_replacements(file_path, replacements):
-    """对文本文件执行批量替换。"""
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    original = content
-    for old, new in replacements:
-        content = content.replace(old, new)
-
-    if content != original:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return True
-    return False
-
-def normalize_resource_filenames(target_dir):
-    """将高风险资源文件名标准化，并同步更新数据库/插件引用。"""
-    print("\n>>> 步骤 6: 标准化高风险资源文件名并同步引用...")
-    resource_roots = [
-        os.path.join(target_dir, "img"),
-        os.path.join(target_dir, "audio"),
-        os.path.join(target_dir, "movies"),
-        os.path.join(target_dir, "effects"),
-        os.path.join(target_dir, "fonts"),
-        os.path.join(target_dir, "icon"),
-    ]
-
-    renamed_entries = []
-    stem_updates = {}
-    basename_updates = {}
-
-    for root_dir in resource_roots:
-        if not os.path.exists(root_dir):
-            continue
-        for root, _, files in os.walk(root_dir):
-            for filename in sorted(files):
-                stem, ext = os.path.splitext(filename)
-                safe_ext = unicodedata.normalize("NFKC", ext)
-                safe_stem = normalize_resource_stem(stem)
-                new_filename = safe_stem + safe_ext
-                if new_filename == filename:
-                    continue
-
-                old_path = os.path.join(root, filename)
-                new_path = os.path.join(root, new_filename)
-                suffix = 1
-                while os.path.exists(new_path):
-                    new_filename = f"{safe_stem}_{suffix}{safe_ext}"
-                    new_path = os.path.join(root, new_filename)
-                    suffix += 1
-
-                os.rename(old_path, new_path)
-                new_stem = os.path.splitext(new_filename)[0]
-                renamed_entries.append((filename, new_filename))
-                basename_updates[filename] = new_filename
-                stem_updates[stem] = new_stem
-
-    if not renamed_entries:
-        print("  [-] 未发现需要标准化的资源文件名。")
-        return
-
-    replacements = []
-    for old, new in {**basename_updates, **stem_updates}.items():
-        replacements.append((old, new))
-    replacements.sort(key=lambda item: len(item[0]), reverse=True)
-
-    touched_files = 0
-    data_dir = os.path.join(target_dir, "data")
-    if os.path.exists(data_dir):
-        for root, _, files in os.walk(data_dir):
-            for filename in files:
-                if filename.endswith(".json"):
-                    if apply_text_replacements(os.path.join(root, filename), replacements):
-                        touched_files += 1
-
-    plugins_js = os.path.join(target_dir, "js", "plugins.js")
-    if os.path.exists(plugins_js) and apply_text_replacements(plugins_js, replacements):
-        touched_files += 1
-
-    print(f"  [+] 已标准化 {len(renamed_entries)} 个资源文件名，并同步更新 {touched_files} 个引用文件。")
-
-def patch_web_compatible_plugins():
-    """修正已知不适合网页部署的插件配置，并禁用异常插件文件。"""
-    print("\n>>> 步骤 7: 修正网页部署下的高风险插件配置...")
-    try:
-        plugins_path, prefix, plugins, suffix = load_plugins_manifest()
-    except Exception as e:
-        print(f"  [!] 读取 plugins.js 失败，跳过插件修正: {e}")
-        return
-
-    if not plugins_path:
-        print("  [-] 未发现 plugins.js，跳过插件修正。")
-        return
-
-    plugin_dir = os.path.join(WWW_DIR, "js", "plugins")
     changed = False
-    disabled_plugins = []
-    tuned_plugins = []
 
     for plugin in plugins:
-        name = plugin.get("name", "")
-        params = plugin.get("parameters", {})
-        plugin_path = os.path.join(plugin_dir, f"{name}.js")
-
-        if plugin.get("status"):
-            if not os.path.exists(plugin_path):
-                plugin["status"] = False
+        if plugin.get("name") == "LL_StandingPicture" and plugin.get("status"):
+            params = plugin.get("parameters", {})
+            if params.get("bootCachePictures") == "true":
+                params["bootCachePictures"] = "false"
+                plugin["parameters"] = params
                 changed = True
-                disabled_plugins.append(f"{name} (文件缺失)")
-                continue
-
-            try:
-                with open(plugin_path, "r", encoding="utf-8", errors="ignore") as f:
-                    head = f.read(256).lstrip().lower()
-                if head.startswith("<!doctype html") or head.startswith("<html"):
-                    plugin["status"] = False
-                    changed = True
-                    disabled_plugins.append(f"{name} (文件内容是 HTML)")
-                    continue
-            except Exception:
-                pass
-
-        if name == "DevToolsManage" and plugin.get("status"):
-            plugin["status"] = False
-            changed = True
-            disabled_plugins.append(f"{name} (本地调试插件不应部署到网页)")
-
-        if name == "LL_StandingPicture" and params.get("bootCachePictures") == "true":
-            params["bootCachePictures"] = "false"
-            plugin["parameters"] = params
-            changed = True
-            tuned_plugins.append("LL_StandingPicture.bootCachePictures=false")
+                print("  [+] 已关闭 LL_StandingPicture 的启动预缓存 (bootCachePictures=false)")
 
     if changed:
-        save_plugins_manifest(plugins_path, prefix, plugins, suffix)
-
-    if disabled_plugins:
-        print("  [+] 已禁用异常/不适合网页部署的插件:")
-        for item in disabled_plugins:
-            print(f"     - {item}")
-    if tuned_plugins:
-        print("  [+] 已调整高风险插件参数:")
-        for item in tuned_plugins:
-            print(f"     - {item}")
-    if not changed:
-        print("  [-] 未发现需要修正的插件配置。")
+        with open(plugins_path, "w", encoding="utf-8") as f:
+            f.write(prefix)
+            json.dump(plugins, f, ensure_ascii=False, indent=2)
+            f.write(suffix if suffix else ";\n")
+    else:
+        print("  [-] 未发现需要修复的目标插件参数。")
 
 def step0_clean_pc_build():
     """步骤 0: 清洗 PC 版冗余文件 (剥离 NW.js 外壳)，提取纯净 Web 核心"""
@@ -679,7 +561,7 @@ def step_convert_video_to_mp4():
 
 def fix_resource_percent_symbols(target_dir):
     """修复资源文件名中的 % 符号"""
-    print(f"\n>>> 步骤 8: 开始清理目录中的 % 符号...")
+    print(f"\n>>> 步骤 7: 开始清理目录中的 % 符号...")
     img_dir = os.path.join(target_dir, 'img')
     data_dir = os.path.join(target_dir, 'data')
     renamed_map = {}
@@ -729,7 +611,8 @@ def get_valid_project_name():
 
 def step11_deploy_to_cloudflare(project_name):
     """推送到 Cloudflare 并注入防伪网关"""
-    print(f"\n🚀 [Step 11] 开始执行部署 (含手动 KV 绑定确认): {project_name} ...")
+    mode_text = "一次性部署" if SINGLE_DEPLOY else "部署 (含手动 KV 绑定确认)"
+    print(f"\n🚀 [Step 11] 开始执行{mode_text}: {project_name} ...")
     
     # [核心修复] 恢复防伪网关代码 (_worker.js) 的拷贝逻辑
     worker_src = os.path.join(BASE_DIR, "_worker.js")
@@ -753,11 +636,7 @@ def step11_deploy_to_cloudflare(project_name):
         "--project-name", project_name,
     ]
 
-    # ==========================================
-    # 阶段一：首次建站部署 (交互式)
-    # ==========================================
     print("\n   ⏳ [阶段一] 正在推送到 Cloudflare...")
-    print("   👉 (如果是新项目，请在下方提示中输入 Y 确认创建)")
     print("   " + "-"*40)
     
     try:
@@ -766,9 +645,11 @@ def step11_deploy_to_cloudflare(project_name):
         print("\n   首次部署失败或被取消，请检查报错。")
         return
 
-    # ==========================================
-    # 阶段二：脚本暂停，等待手动绑定
-    # ==========================================
+    if SINGLE_DEPLOY:
+        print("   " + "-"*40)
+        print(f"\n  单次部署完成！")
+        return
+
     print("\n" + "!"*55)
     print(" ⚠️ 关键操作：守卫需要数据库钥匙 ⚠️")
     print(f" 项目 '{project_name}' 已初步上线，但尚未连接 KV 数据库！")
@@ -781,12 +662,8 @@ def step11_deploy_to_cloudflare(project_name):
     print(" 6. 点击 Save (保存)")
     print("!"*55)
     
-    # 阻塞脚本，直到你敲下回车键
     input("\n  完成网页端绑定后，请在这里按下【回车键】进行最终部署刷新...")
 
-    # ==========================================
-    # 阶段三：二次部署刷新边缘节点
-    # ==========================================
     print("\n   [阶段三] 正在重新部署，使 KV 绑定正式生效...")
     print("   " + "-"*40)
     try:
@@ -797,11 +674,11 @@ def step11_deploy_to_cloudflare(project_name):
         print("\n   二次部署失败。")
 
 def main():
-    ensure_game_name()
     print("="*50)
     print(" RPG Maker Web 全自动部署处理流 (MV/MZ 兼容版)")
     print("="*50)
     
+    prepare_www_workspace()
     step0_clean_pc_build()
     step0_apply_mtools_translation()
     step1_apply_patch()
@@ -810,8 +687,7 @@ def main():
     step4_decrypt_assets(key)
     step5_convert_audio_to_m4a()
     step_convert_video_to_mp4()
-    normalize_resource_filenames(WWW_DIR)
-    patch_web_compatible_plugins()
+    patch_problematic_plugin_params()
     fix_resource_percent_symbols(WWW_DIR)
     
     FINAL_PROJECT_NAME = get_valid_project_name()
