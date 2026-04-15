@@ -1,0 +1,256 @@
+<style>
+    /* 容器与基础样式 (完全保留) */
+    #v-pad { position: fixed; bottom: 20px; width: 100%; height: 180px; z-index: 10000; pointer-events: none; transition: opacity 0.3s; }
+    .v-btn { position: absolute; pointer-events: auto; background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); touch-action: none; -webkit-user-select: none; }
+    .v-btn svg { width: 60%; height: 60%; fill: white; }
+    .v-btn:active { background: rgba(255,255,255,0.5); transform: scale(0.92); }
+
+    /* 系统按钮 (Home & 隐藏) (完全保留) */
+    .sys-btns { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 20px; display: flex; gap: 10px; pointer-events: auto; }
+    .btn-sys { width: 42px; height: 42px; border-radius: 10px; position: static; }
+
+    /* 左侧：全新 SVG 8向轮盘 */
+    .d-pad { left: 25px; bottom: 10px; width: 150px; height: 150px; position: absolute; pointer-events: auto; border-radius: 50%; }
+    #vpad-svg { width: 100%; height: 100%; }
+    .sector { transition: stroke 0.05s ease-out; }
+    /* 配合你右侧按钮的主题色，激活时发出清脆的浅蓝色光 */
+    .sector.active { stroke: rgba(77, 168, 218, 0.9) !important; filter: url(#glow); }
+
+    /* 右侧：功能键区 (Z, X, Ctrl, Shift) (完全保留) */
+    .action-btns { right: 25px; bottom: 10px; width: 150px; height: 140px; position: absolute; }
+    .act-label { color: white; font-weight: bold; font-family: Arial; font-size: 16px; }
+    .btn-z { right: 0; bottom: 10px; width: 65px; height: 65px; background: rgba(77, 168, 218, 0.4); } 
+    .btn-x { right: 75px; bottom: 10px; width: 55px; height: 55px; } 
+    .btn-ctrl { right: 10px; top: 0; width: 45px; height: 45px; } 
+    .btn-shift { right: 70px; top: 10px; width: 45px; height: 45px; } 
+</style>
+
+<div id="v-pad">
+    <div class="sys-btns">
+        <input type="file" id="save-upload" accept=".json" style="position:absolute; width:0; height:0; opacity:0;" onchange="handleImport(event)">
+    
+        <div class="v-btn btn-sys" onclick="exportSave()" ontouchstart="event.stopPropagation();" ontouchend="event.stopPropagation();" title="拔卡"><svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></div>
+    
+        <label class="v-btn btn-sys" for="save-upload" ontouchstart="event.stopPropagation();" ontouchend="event.stopPropagation();" title="插卡"><svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></label>
+    
+        <div class="v-btn btn-sys" onclick="window.location.reload()" ontouchstart="event.stopPropagation();" ontouchend="event.stopPropagation();" title="刷新"><svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></div>
+        
+        <div class="v-btn btn-sys" onclick="toggleVPad()" ontouchstart="event.stopPropagation();" ontouchend="event.stopPropagation();">
+            <svg id="svg-eye" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+        </div>
+        
+        <div class="v-btn btn-sys" onclick="window.location.href='/'" ontouchstart="event.stopPropagation();" ontouchend="event.stopPropagation();">
+            <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        </div>
+    </div>
+
+    <div id="pad-body" style="width:100%; height:100%;">
+        <div class="d-pad" id="d-pad-zone">
+            <svg viewBox="0 0 200 200" id="vpad-svg">
+                <defs>
+                    <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                </defs>
+                <circle cx="100" cy="100" r="95" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" stroke-width="2" />
+                <g id="sectors" fill="none" stroke-width="50" transform="translate(100,100)">
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(-22.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(22.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(67.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(112.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(157.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(202.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(247.5)"/>
+                    <circle class="sector" r="65" stroke="rgba(255,255,255,0)" stroke-dasharray="51 1000" transform="rotate(292.5)"/>
+                </g>
+                <circle cx="100" cy="100" r="30" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+            </svg>
+        </div>
+        
+        <div class="action-btns">
+            <div class="v-btn btn-z" data-code="90"><span class="act-label">Z</span></div>
+            <div class="v-btn btn-x" data-code="88"><span class="act-label">X</span></div>
+            <div class="v-btn btn-ctrl" data-code="17"><span class="act-label">Ct</span></div>
+            <div class="v-btn btn-shift" data-code="16"><span class="act-label">Sh</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==========================================
+    // 0. 安全兜底补丁 (辅助 Step 2)
+    // ==========================================
+    (function enforceWebModeSafe() {
+        if (window.StorageManager && window.Utils) {
+            Utils.isNwjs = function() { return false; };
+            if(typeof StorageManager.isLocalMode === 'function') {
+                StorageManager.isLocalMode = function() { return false; };
+            }
+        } else {
+            setTimeout(enforceWebModeSafe, 50);
+        }
+    })();
+
+    // ==========================================
+    // 1. 卡带读写逻辑 (精准匹配 MZ/MV 键名)
+    // ==========================================
+    function triggerDownload(dataObj) {
+        const blob = new Blob([JSON.stringify(dataObj)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.download = `Save_${Date.now()}.json`;
+        a.href = URL.createObjectURL(blob); a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    window.exportSave = async function() {
+        if (window.localforage) {
+            try {
+                const keys = await localforage.keys();
+                const saveKeys = keys.filter(k => k.startsWith('rmmz'));
+                if(saveKeys.length === 0) return alert("机身内存为空，请先在游戏中存个档！");
+                
+                let data = {};
+                for(let k of saveKeys) data[k] = await localforage.getItem(k);
+                triggerDownload(data);
+            } catch (err) { alert("MZ 存档读取失败！"); }
+        } else {
+            let data = {}; let hasSave = false;
+            for(let i=0; i<localStorage.length; i++) {
+                let k = localStorage.key(i);
+                if(k.startsWith('RPG ')) { data[k] = localStorage.getItem(k); hasSave = true; }
+            }
+            if(!hasSave) return alert("机身内存为空，请先在游戏中存个档！");
+            triggerDownload(data);
+        }
+    };
+
+    window.handleImport = function(event) {
+        const file = event.target.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (window.localforage) {
+                    for(let k in data) {
+                        if(k.startsWith('rmmz')) await localforage.setItem(k, data[k]);
+                    }
+                } else {
+                    let keysToRemove = [];
+                    for(let i=0; i<localStorage.length; i++) {
+                        if(localStorage.key(i).startsWith('RPG ')) keysToRemove.push(localStorage.key(i));
+                    }
+                    keysToRemove.forEach(k => localStorage.removeItem(k));
+                    for(let k in data) localStorage.setItem(k, data[k]);
+                }
+                alert("插卡成功！点击确定后自动重启。");
+                window.location.reload(); 
+            } catch(err) { alert("卡带读取失败，文件可能已损坏！"); }
+            event.target.value = ''; 
+        };
+        reader.readAsText(file);
+    };
+
+    // ==========================================
+    // 2. 显示/隐藏逻辑 (完全保留)
+    // ==========================================
+    window.toggleVPad = function() {
+        const body = document.getElementById('pad-body');
+        if (body.style.display === 'none') {
+            body.style.display = 'block';
+            body.parentElement.style.opacity = '1';
+        } else {
+            body.style.display = 'none';
+            body.parentElement.style.opacity = '0.4';
+        }
+    };
+
+    // ==========================================
+    // 3. 核心按键与全新 8向摇杆逻辑
+    // ==========================================
+    document.addEventListener('DOMContentLoaded', () => {
+        // 你的模拟键盘事件 (完全保留)
+        const simulateKey = (code, type) => {
+            const event = new KeyboardEvent(type, { keyCode: parseInt(code), which: parseInt(code), bubbles: true });
+            document.dispatchEvent(event);
+            if (window.Input && Input._onKeyDown && type === 'keydown') Input._onKeyDown(event);
+            if (window.Input && Input._onKeyUp && type === 'keyup') Input._onKeyUp(event);
+        };
+
+        // --- 处理右侧功能键 (完全保留) ---
+        const actBtns = document.querySelectorAll('.action-btns .v-btn[data-code]');
+        actBtns.forEach(btn => {
+            const code = btn.getAttribute('data-code');
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); simulateKey(code, 'keydown'); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); simulateKey(code, 'keyup'); });
+            btn.addEventListener('mousedown', () => simulateKey(code, 'keydown'));
+            btn.addEventListener('mouseup', () => simulateKey(code, 'keyup'));
+        });
+
+        // --- 处理左侧 8 向轮盘 (对接 SVG 动画) ---
+        const dpadZone = document.getElementById('d-pad-zone');
+        const sectors = document.querySelectorAll('.sector');
+        let currentDpadIndex = -1;
+        let activeKeys = []; // 记录当前按下的方向键
+
+        // 8向切片对应的按键码 (38:上, 40:下, 37:左, 39:右)
+        const keyMap = {
+            0: [39],          // 右
+            1: [39, 40],      // 右下
+            2: [40],          // 下
+            3: [37, 40],      // 左下
+            4: [37],          // 左
+            5: [37, 38],      // 左上
+            6: [38],          // 上
+            7: [39, 38]       // 右上
+        };
+
+        const releaseAllDpadKeys = () => {
+            activeKeys.forEach(code => simulateKey(code, 'keyup'));
+            activeKeys = [];
+            if (currentDpadIndex !== -1) {
+                sectors[currentDpadIndex].classList.remove('active');
+                currentDpadIndex = -1;
+            }
+        };
+
+        const updateDpad = (e) => {
+            e.preventDefault();
+            if (e.type === 'touchend' || e.type === 'touchcancel') {
+                return releaseAllDpadKeys();
+            }
+            
+            const touch = e.targetTouches[0] || e.changedTouches[0];
+            const rect = dpadZone.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const dx = touch.clientX - centerX;
+            const dy = touch.clientY - centerY;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            // 死区判定：内圈不触发
+            if (distance < 25) {
+                return releaseAllDpadKeys();
+            }
+
+            // 计算角度并切分为 0-7 区块
+            let angle = Math.atan2(dy, dx) * 180 / Math.PI; 
+            if (angle < 0) angle += 360;
+            const index = Math.floor(((angle + 22.5) % 360) / 45);
+
+            // 状态变更：跨越扇形区域时更新动画和按键
+            if (index !== currentDpadIndex) {
+                releaseAllDpadKeys(); // 先松开旧的
+                currentDpadIndex = index;
+                sectors[index].classList.add('active'); // 点亮新扇形
+                
+                // 按下新的方向键
+                activeKeys = keyMap[index];
+                activeKeys.forEach(code => simulateKey(code, 'keydown'));
+            }
+        };
+
+        dpadZone.addEventListener('touchstart', updateDpad, {passive: false});
+        dpadZone.addEventListener('touchmove', updateDpad, {passive: false});
+        dpadZone.addEventListener('touchend', updateDpad);
+        dpadZone.addEventListener('touchcancel', updateDpad);
+    });
+</script>
