@@ -15,6 +15,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WWW_DIR = os.path.join(BASE_DIR, "www")
 PATCH_ZIP = os.path.join(BASE_DIR, "patch.zip")
 SYSTEM_JSON_PATH = os.path.join(WWW_DIR, "data", "System.json")
+CLOUDFLARE_CREDENTIALS_PATH = os.path.join(BASE_DIR, "cloudflare_credentials.json")
 # [新增] 虚拟手柄文件的路径
 VPAD_HTML_PATH = os.path.join(BASE_DIR, "vpad.html") 
 
@@ -33,15 +34,30 @@ DEPLOY_DIR = os.path.join("/var/www/html/games", GAME_NAME)
 LOBBY_HTML_PATH = "/var/www/html/index.html"
 
 # ==========================================
-# CloudFlare 部署全局变量
-# ==========================================
-CF_ACCOUNT_ID = "448a6555b9fa214fda6725749e292863"
-CF_API_TOKEN = "T-nHUJNLbuvvX9N9dxqsWlbKd4TbULV21sWWrIfp"
-CF_KV_NAMESPACE_ID = "e4f91a136fb149a0a2e52a829af77d31"
-
-# ==========================================
 # 核心流水线函数
 # ==========================================
+
+def load_cloudflare_credentials():
+    """从独立配置文件加载 Cloudflare 凭证。"""
+    if not os.path.exists(CLOUDFLARE_CREDENTIALS_PATH):
+        print(f"  [!] 缺少 Cloudflare 凭证文件: {CLOUDFLARE_CREDENTIALS_PATH}")
+        print("  [!] 请参考 cloudflare_credentials.json.example 创建实际配置文件。")
+        sys.exit(1)
+
+    try:
+        with open(CLOUDFLARE_CREDENTIALS_PATH, "r", encoding="utf-8") as f:
+            credentials = json.load(f)
+    except Exception as e:
+        print(f"  [!] Cloudflare 凭证文件解析失败: {e}")
+        sys.exit(1)
+
+    required_fields = ["account_id", "api_token"]
+    missing_fields = [field for field in required_fields if not credentials.get(field)]
+    if missing_fields:
+        print(f"  [!] Cloudflare 凭证缺少必要字段: {', '.join(missing_fields)}")
+        sys.exit(1)
+
+    return credentials
 
 def detect_game_source_dir():
     """检测完整 PC 游戏目录，并作为 www 工作区来源。"""
@@ -1316,6 +1332,7 @@ def step11_deploy_to_cloudflare(project_name):
     """推送到 Cloudflare 并注入防伪网关"""
     mode_text = "一次性部署" if SINGLE_DEPLOY else "部署 (含手动 KV 绑定确认)"
     print(f"\n🚀 [Step 11] 开始执行{mode_text}: {project_name} ...")
+    cf_credentials = load_cloudflare_credentials()
     
     # [核心修复] 恢复防伪网关代码 (_worker.js) 的拷贝逻辑
     worker_src = os.path.join(BASE_DIR, "_worker.js")
@@ -1330,8 +1347,8 @@ def step11_deploy_to_cloudflare(project_name):
 
     # 注入部署凭证环境变量
     env = os.environ.copy()
-    env["CLOUDFLARE_ACCOUNT_ID"] = CF_ACCOUNT_ID
-    env["CLOUDFLARE_API_TOKEN"] = CF_API_TOKEN
+    env["CLOUDFLARE_ACCOUNT_ID"] = cf_credentials["account_id"]
+    env["CLOUDFLARE_API_TOKEN"] = cf_credentials["api_token"]
 
     deploy_cmd = [
         "wrangler", "pages", "deploy", 

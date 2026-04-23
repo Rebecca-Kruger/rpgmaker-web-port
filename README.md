@@ -36,6 +36,7 @@
 
 - `patch.zip`
 - `CN.json`
+- `cloudflare_credentials.json`
 
 输入目录要求：
 
@@ -57,7 +58,17 @@
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 
-目前这两个值写死在脚本里。如果后面要做通用化，建议改成从外部环境读取。
+但这两个值不是写死在脚本里，而是从仓库根目录下的 `cloudflare_credentials.json` 读取。
+
+模板文件：
+
+- `cloudflare_credentials.json.example`
+
+实际使用文件：
+
+- `cloudflare_credentials.json`
+
+实际凭证文件已加入 `.gitignore`，不会被 git 追踪。
 
 ## 用法
 

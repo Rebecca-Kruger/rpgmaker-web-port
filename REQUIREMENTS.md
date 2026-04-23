@@ -78,19 +78,38 @@ wrangler --version
 
 ## Cloudflare 配置
 
-脚本部署依赖两个凭证：
+脚本部署依赖两个凭证，放在仓库根目录下的 `cloudflare_credentials.json`：
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 
-现在这两个值是直接写在 [RPGMZ_pipline.py](/home/ubuntu/RPG_game/RPGMZ_pipline.py) 里的，所以当前仓库开箱即可跑。
+模板文件是：
 
-如果后续你要把脚本做成通用版，建议改成从环境变量读取，例如：
+- `cloudflare_credentials.json.example`
+
+建议做法：
+
+1. 复制模板文件
+2. 新建实际凭证文件 `cloudflare_credentials.json`
+3. 填入真实的 `account_id` 和 `api_token`
+
+示例：
 
 ```bash
-export CLOUDFLARE_ACCOUNT_ID="..."
-export CLOUDFLARE_API_TOKEN="..."
+cp cloudflare_credentials.json.example cloudflare_credentials.json
 ```
+
+文件内容示例：
+
+```json
+{
+  "account_id": "your_cloudflare_account_id",
+  "api_token": "your_cloudflare_api_token",
+  "kv_namespace_id": "optional_kv_namespace_id"
+}
+```
+
+实际凭证文件已被 `.gitignore` 忽略，不会被 git 追踪。
 
 ## Wrangler 目录权限
 
@@ -150,10 +169,7 @@ export PATH="$PATH:/usr/bin:/usr/local/bin"
 
 如果以后把 Cloudflare 凭证移出脚本，再加上：
 
-```bash
-export CLOUDFLARE_ACCOUNT_ID="your_account_id"
-export CLOUDFLARE_API_TOKEN="your_api_token"
-```
+当前版本不需要再额外导出这两个环境变量。
 
 ## 最小自检
 
