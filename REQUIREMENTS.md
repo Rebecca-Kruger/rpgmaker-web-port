@@ -78,7 +78,7 @@ wrangler --version
 
 ## Cloudflare 配置
 
-脚本部署依赖两个凭证，放在仓库根目录下的 `cloudflare_credentials.json`：
+只有使用 `--deploy-target cloudflare` 时才需要 Cloudflare 凭证。凭证放在仓库根目录下的 `cloudflare_credentials.json`：
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
@@ -167,9 +167,7 @@ export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
 export PATH="$PATH:/usr/bin:/usr/local/bin"
 ```
 
-如果以后把 Cloudflare 凭证移出脚本，再加上：
-
-当前版本不需要再额外导出这两个环境变量。
+当前版本不需要再额外导出 Cloudflare 账号环境变量；脚本会按需读取 `cloudflare_credentials.json`。
 
 ## 最小自检
 
@@ -199,6 +197,23 @@ python3 RPGMZ_pipline.py <项目名>
 ```
 
 默认是普通静态部署，不启用 KV 访问验证。
+
+默认部署目标是 Cloudflare Pages。也可以选择其他部署目标：
+
+```bash
+python3 RPGMZ_pipline.py <项目名> --deploy-target cloudflare
+python3 RPGMZ_pipline.py <项目名> --deploy-target local --output-dir ./dist/<项目名>
+python3 RPGMZ_pipline.py <项目名> --deploy-target local --serve-local --local-port 8080
+python3 RPGMZ_pipline.py <项目名> --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
+python3 RPGMZ_pipline.py <项目名> --deploy-target none
+```
+
+`custom` 部署命令会收到这些环境变量：
+
+- `RPGMZ_PROJECT_NAME`
+- `RPGMZ_WWW_DIR`
+- `RPGMZ_OUTPUT_DIR`
+- `RPGMZ_BASE_DIR`
 
 如果需要访问码验证页，使用：
 

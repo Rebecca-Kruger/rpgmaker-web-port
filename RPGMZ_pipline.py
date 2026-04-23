@@ -1,6 +1,6 @@
 from pipeline.audio import convert_audio_to_m4a, sanitize_audio_filenames, validate_audio_consistency
-from pipeline.config import load_cloudflare_credentials, load_runtime_config
-from pipeline.deploy import deploy_to_cloudflare
+from pipeline.config import load_runtime_config
+from pipeline.deploy import deploy_build
 from pipeline.injections import patch_problematic_plugin_params, patch_runtime_injections
 from pipeline.resources import (
     apply_mtools_translation,
@@ -36,8 +36,7 @@ def main():
     fix_resource_percent_symbols(runtime.www_dir)
 
     final_project_name = get_valid_project_name(runtime.game_name)
-    credentials = load_cloudflare_credentials(runtime.cloudflare_credentials_path)
-    deploy_to_cloudflare(final_project_name, runtime, credentials)
+    deploy_build(final_project_name, runtime)
 
     print("\n" + "=" * 50)
     print(f"\n 部署大功告成！游戏 [{runtime.game_name}] 已经在线上就绪！")

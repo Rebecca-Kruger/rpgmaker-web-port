@@ -3,15 +3,29 @@ import shutil
 import subprocess
 import sys
 
+from pipeline.config import load_cloudflare_credentials
 
-def deploy_to_cloudflare(project_name, runtime, credentials):
-    """推送到 Cloudflare，可选注入 KV 访问验证网关。"""
-    if runtime.enable_kv_auth:
-        mode_text = "KV 访问验证部署" if not runtime.single_deploy else "KV 访问验证一次性部署"
+
+def deploy_build(project_name, runtime):
+    """根据目标后端发布构建产物。"""
+    prepare_access_worker(runtime)
+    if runtime.deploy_target == "cloudflare":
+        credentials = load_cloudflare_credentials(runtime.cloudflare_credentials_path)
+        deploy_to_cloudflare(project_name, runtime, credentials)
+    elif runtime.deploy_target == "local":
+        deploy_to_local(project_name, runtime)
+    elif runtime.deploy_target == "custom":
+        deploy_to_custom(project_name, runtime)
+    elif runtime.deploy_target == "none":
+        print("\n🚀 [Step 11] 已跳过部署，仅保留构建产物。")
+        print(f"  构建目录: {runtime.www_dir}")
     else:
-        mode_text = "普通静态部署"
-    print(f"\n🚀 [Step 11] 开始执行{mode_text}: {project_name} ...")
+        print(f"  [!] 未知部署目标: {runtime.deploy_target}")
+        sys.exit(1)
 
+
+def prepare_access_worker(runtime):
+    """根据 KV 开关注入或清理 Cloudflare Pages Worker。"""
     worker_src = os.path.join(runtime.base_dir, "_worker.js")
     worker_dest = os.path.join(runtime.www_dir, "_worker.js")
 
@@ -24,7 +38,16 @@ def deploy_to_cloudflare(project_name, runtime, credentials):
             sys.exit(1)
     elif os.path.exists(worker_dest):
         os.remove(worker_dest)
-        print("   已移除 www 中旧的 _worker.js，本次按普通静态站点部署。")
+        print("   已移除 www 中旧的 _worker.js，本次不启用 KV 访问验证。")
+
+
+def deploy_to_cloudflare(project_name, runtime, credentials):
+    """推送到 Cloudflare，可选注入 KV 访问验证网关。"""
+    if runtime.enable_kv_auth:
+        mode_text = "KV 访问验证部署" if not runtime.single_deploy else "KV 访问验证一次性部署"
+    else:
+        mode_text = "普通静态部署"
+    print(f"\n🚀 [Step 11] 开始执行{mode_text}: {project_name} ...")
 
     env = os.environ.copy()
     env["CLOUDFLARE_ACCOUNT_ID"] = credentials.account_id
@@ -78,3 +101,49 @@ def deploy_to_cloudflare(project_name, runtime, credentials):
         print("\n  KV 访问验证已启用，部署完成。")
     except subprocess.CalledProcessError:
         print("\n   二次部署失败。")
+
+
+def deploy_to_local(project_name, runtime):
+    """复制到本地输出目录，可选启动本地 HTTP 服务。"""
+    print(f"\n🚀 [Step 11] 开始执行本地部署: {project_name} ...")
+    output_dir = runtime.output_dir
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    shutil.copytree(runtime.www_dir, output_dir)
+    print(f"  [+] 已复制 Web 构建产物到: {output_dir}")
+
+    if not runtime.serve_local:
+        print("  [+] 本地部署完成。可用任意静态服务器托管该目录。")
+        return
+
+    print(f"  [+] 正在启动本地 HTTP 服务: http://127.0.0.1:{runtime.local_port}")
+    print("  [!] 该命令会阻塞当前终端，按 Ctrl+C 停止服务。")
+    subprocess.run([
+        sys.executable,
+        "-m",
+        "http.server",
+        str(runtime.local_port),
+        "--directory",
+        output_dir,
+    ], check=False)
+
+
+def deploy_to_custom(project_name, runtime):
+    """执行自定义部署命令，供 rsync、scp、Docker 或外部打包器接入。"""
+    if not runtime.custom_deploy_command:
+        print("  [!] --deploy-target custom 需要提供 --custom-deploy-command")
+        sys.exit(1)
+
+    print(f"\n🚀 [Step 11] 开始执行自定义部署: {project_name} ...")
+    env = os.environ.copy()
+    env["RPGMZ_PROJECT_NAME"] = project_name
+    env["RPGMZ_WWW_DIR"] = runtime.www_dir
+    env["RPGMZ_OUTPUT_DIR"] = runtime.output_dir
+    env["RPGMZ_BASE_DIR"] = runtime.base_dir
+
+    try:
+        subprocess.run(runtime.custom_deploy_command, shell=True, env=env, check=True)
+        print("  [+] 自定义部署命令执行完成。")
+    except subprocess.CalledProcessError as exc:
+        print(f"  [!] 自定义部署失败，退出码: {exc.returncode}")
+        sys.exit(exc.returncode)

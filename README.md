@@ -1,6 +1,6 @@
 # RPGMZ Web Porting Toolkit
 
-Turn an RPG Maker MV/MZ Windows build into a mobile-friendly web build and deploy it to Cloudflare Pages with one pipeline.
+Turn an RPG Maker MV/MZ Windows build into a mobile-friendly web build that can be deployed to Cloudflare Pages, a local directory, or a custom server.
 
 This project exists for a very specific pain:
 
@@ -41,7 +41,7 @@ Current pipeline capabilities:
 - converts `webm` movies to `mp4`
 - injects browser compatibility patches, mobile controls, and selected runtime fixes
 - injects optional iPhone-side audio debugging via `?audioDebug=1`
-- deploys the final build to Cloudflare Pages
+- deploys the final build to Cloudflare Pages, a local directory, a custom command, or build-only output
 
 ## Why It Is Different From Random Scripts
 
@@ -86,6 +86,23 @@ Typical usage:
 python3 RPGMZ_pipline.py fgo-rpg
 ```
 
+Choose a deployment target:
+
+```bash
+python3 RPGMZ_pipline.py fgo-rpg --deploy-target cloudflare
+python3 RPGMZ_pipline.py fgo-rpg --deploy-target local --output-dir ./dist/fgo-rpg
+python3 RPGMZ_pipline.py fgo-rpg --deploy-target local --serve-local --local-port 8080
+python3 RPGMZ_pipline.py fgo-rpg --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
+python3 RPGMZ_pipline.py fgo-rpg --deploy-target none
+```
+
+Deployment targets:
+
+- `cloudflare`: deploys to Cloudflare Pages, the default.
+- `local`: copies the final web build to a local directory.
+- `custom`: runs your own deployment command with build paths exposed as environment variables.
+- `none`: builds only and leaves the final output in `www/`.
+
 Enable Cloudflare KV access verification only when you need a gated demo:
 
 ```bash
@@ -118,7 +135,7 @@ The script expects a full RPG Maker MV/MZ game directory under the repo root wit
 
 ## Cloudflare Credentials
 
-Real credentials are read from:
+Real credentials are only required for the `cloudflare` deployment target. They are read from:
 
 - `cloudflare_credentials.json`
 
@@ -145,6 +162,17 @@ By default, the pipeline deploys a normal static Cloudflare Pages build.
 If `--enable-kv-auth` is provided, the pipeline copies `_worker.js` into `www/` and enables a Cloudflare Pages Worker gate backed by a KV namespace binding named `AUTH_CODES`.
 
 The verification page describes the build as a technical exploration simulator. It should not present itself as an official or licensed product.
+
+## Custom Deployment Hooks
+
+For `--deploy-target custom`, the command receives these environment variables:
+
+- `RPGMZ_PROJECT_NAME`
+- `RPGMZ_WWW_DIR`
+- `RPGMZ_OUTPUT_DIR`
+- `RPGMZ_BASE_DIR`
+
+This is intended for custom servers, Docker images, rsync/scp publishing, or later packaging the generated web runtime into a native wrapper.
 
 ## iPhone / iPad Debugging
 
@@ -220,7 +248,7 @@ Planned high-value improvements:
 
 Current limitations are intentional and should be explicit:
 
-- this toolkit is still opinionated toward Cloudflare Pages deployment
+- Cloudflare Pages is still the most complete deployment backend, but local and custom targets are now supported
 - the codebase is mid-refactor, not a finished framework
 - it still uses targeted runtime patch injection for some compatibility fixes
 - not every RPG Maker plugin stack will behave identically on the web

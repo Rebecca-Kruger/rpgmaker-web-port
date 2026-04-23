@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass
 
@@ -13,6 +14,11 @@ class RuntimeConfig:
     cloudflare_credentials_path: str
     vpad_html_path: str
     game_name: str
+    deploy_target: str
+    output_dir: str
+    custom_deploy_command: str
+    serve_local: bool
+    local_port: int
     single_deploy: bool
     enable_kv_auth: bool
     save_prefix: str
@@ -31,14 +37,28 @@ def load_runtime_config(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
         print("❌ 错误：缺少游戏文件夹名称！")
-        print("💡 用法: python3 RPGMZ_pipline.py <项目名> [--enable-kv-auth] [--single-deploy]")
+        print("💡 用法: python3 RPGMZ_pipline.py <项目名> [--deploy-target cloudflare|local|custom|none]")
         sys.exit(1)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     game_name = argv[0]
-    single_deploy = "--single-deploy" in argv[1:]
-    enable_kv_auth = "--enable-kv-auth" in argv[1:]
+    options = _parse_options(argv[1:])
+    deploy_target = options.get("deploy_target", "cloudflare")
+    if deploy_target not in {"cloudflare", "local", "custom", "none"}:
+        print(f"❌ 错误：未知部署目标 {deploy_target}")
+        print("💡 可选值: cloudflare, local, custom, none")
+        sys.exit(1)
+    if deploy_target != "cloudflare" and options.get("enable_kv_auth", False):
+        print("❌ 错误：--enable-kv-auth 目前只支持 Cloudflare Pages 部署。")
+        sys.exit(1)
+
+    local_port = int(options.get("local_port", "8080"))
     www_dir = os.path.join(base_dir, "www")
+    output_dir = options.get("output_dir")
+    if output_dir:
+        output_dir = os.path.abspath(output_dir)
+    else:
+        output_dir = os.path.join(base_dir, "dist", game_name)
     return RuntimeConfig(
         base_dir=base_dir,
         www_dir=www_dir,
@@ -47,12 +67,49 @@ def load_runtime_config(argv=None):
         cloudflare_credentials_path=os.path.join(base_dir, "cloudflare_credentials.json"),
         vpad_html_path=os.path.join(base_dir, "vpad.html"),
         game_name=game_name,
-        single_deploy=single_deploy,
-        enable_kv_auth=enable_kv_auth,
+        deploy_target=deploy_target,
+        output_dir=output_dir,
+        custom_deploy_command=options.get("custom_deploy_command", ""),
+        serve_local=options.get("serve_local", False),
+        local_port=local_port,
+        single_deploy=options.get("single_deploy", False),
+        enable_kv_auth=options.get("enable_kv_auth", False),
         save_prefix=game_name.upper() + "_",
         deploy_dir=os.path.join("/var/www/html/games", game_name),
         lobby_html_path="/var/www/html/index.html",
     )
+
+
+def _parse_options(args):
+    options = {}
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--single-deploy":
+            options["single_deploy"] = True
+        elif arg == "--enable-kv-auth":
+            options["enable_kv_auth"] = True
+        elif arg == "--serve-local":
+            options["serve_local"] = True
+        elif arg in {"--deploy-target", "--output-dir", "--custom-deploy-command", "--local-port"}:
+            if index + 1 >= len(args):
+                print(f"❌ 错误：{arg} 缺少参数值")
+                sys.exit(1)
+            value = args[index + 1]
+            if arg == "--deploy-target":
+                options["deploy_target"] = value
+            elif arg == "--output-dir":
+                options["output_dir"] = value
+            elif arg == "--custom-deploy-command":
+                options["custom_deploy_command"] = value
+            elif arg == "--local-port":
+                options["local_port"] = value
+            index += 1
+        else:
+            print(f"❌ 错误：未知参数 {shlex.quote(arg)}")
+            sys.exit(1)
+        index += 1
+    return options
 
 
 def load_cloudflare_credentials(credentials_path):
