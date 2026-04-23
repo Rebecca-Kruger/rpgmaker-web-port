@@ -6,8 +6,8 @@ import sys
 
 
 def convert_audio_to_m4a(www_dir):
-    """将 ogg 批量转码为 m4a"""
-    print("\n>>> 步骤 5: 转换音频格式为 iOS 兼容的 m4a...")
+    """Convert ogg/wav audio files to m4a."""
+    print("\n>>> Step 5: Converting audio to iOS-compatible m4a...")
     audio_dir = os.path.join(www_dir, "audio")
     if not os.path.exists(audio_dir):
         return
@@ -16,7 +16,7 @@ def convert_audio_to_m4a(www_dir):
     synthesized_silence_count = 0
 
     def synthesize_silence_audio(target_path, lower_file):
-        """为 0 byte 音频合成一段极短静音，避免 ffmpeg 因空文件直接失败。"""
+        """Generate short silence for 0-byte audio files so ffmpeg can continue."""
         if lower_file.endswith(".ogg"):
             cmd = [
                 "ffmpeg", "-y",
@@ -53,11 +53,11 @@ def convert_audio_to_m4a(www_dir):
 
             try:
                 if os.path.getsize(orig_path) == 0:
-                    print(f"  [!] 检测到 0 byte 音频，正在补静音: {filename}")
+                    print(f"  [!] Detected 0-byte audio. Generating silence for: {filename}")
                     synthesize_silence_audio(orig_path, lower_file)
                     synthesized_silence_count += 1
             except subprocess.CalledProcessError:
-                print(f"  [!] 0 byte 音频静音补写失败，流水线终止: {filename}")
+                print(f"  [!] Failed to synthesize silence for 0-byte audio. Stopping pipeline: {filename}")
                 raise
 
             if not os.path.exists(m4a_path):
@@ -70,25 +70,25 @@ def convert_audio_to_m4a(www_dir):
                     subprocess.run(cmd, check=True)
                     converted_count += 1
                 except subprocess.CalledProcessError:
-                    print(f"  [!] 转码失败跳过: {filename}")
+                    print(f"  [!] Audio conversion failed, skipping: {filename}")
                     continue
 
             if lower_file.endswith(".wav"):
                 os.remove(orig_path)
                 shutil.copy2(m4a_path, orig_path)
-                print(f"  [伪装成功] 已将巨型 {filename} 替换为 128k aac 内核，安全越过 25MB 红线！")
+                print(f"  [WAV shim applied] Replaced large {filename} with a 128k AAC-backed file to avoid size limits.")
 
-    print(f"  [+] 音频转码结束，处理了 {converted_count} 个文件，补写了 {synthesized_silence_count} 个空白音频。")
+    print(f"  [+] Audio conversion complete. Converted {converted_count} files and synthesized {synthesized_silence_count} silent audio files.")
 
 
 def sanitize_audio_filenames(www_dir):
-    """将非 ASCII 音频文件名改为安全 ASCII，并同步重写数据引用。"""
-    print("\n>>> 步骤 5.3: ASCII 化音频文件名并重写引用...")
+    """Normalize non-ASCII audio filenames to ASCII and rewrite data references."""
+    print("\n>>> Step 5.3: Normalizing audio filenames to ASCII and rewriting references...")
     audio_dir = os.path.join(www_dir, "audio")
     data_dir = os.path.join(www_dir, "data")
     plugins_js_path = os.path.join(www_dir, "js", "plugins.js")
     if not os.path.exists(audio_dir):
-        print("  [-] 未找到 audio 目录，跳过音频文件名修复。")
+        print("  [-] audio directory not found. Skipping audio filename normalization.")
         return
 
     def is_ascii(text):
@@ -196,7 +196,7 @@ def sanitize_audio_filenames(www_dir):
             total_renamed += 1
 
     if total_renamed == 0:
-        print("  [-] 未发现需要 ASCII 化的音频文件名。")
+        print("  [-] No non-ASCII audio filenames found.")
         return
 
     if os.path.exists(data_dir):
@@ -223,19 +223,19 @@ def sanitize_audio_filenames(www_dir):
     with open(rename_map_path, "w", encoding="utf-8") as file:
         json.dump(mapping_by_folder, file, ensure_ascii=False, indent=2)
 
-    print(f"  [+] 已 ASCII 化 {total_renamed} 个音频基名，并同步重写数据引用。")
+    print(f"  [+] Normalized {total_renamed} audio basenames and rewrote data references.")
 
 
 def validate_audio_consistency(www_dir, system_json_path):
-    """构建后校验音频状态，防止 System.json 与实际资源状态不一致。"""
-    print("\n>>> 步骤 5.5: 校验构建后音频一致性...")
+    """Validate audio build consistency after processing."""
+    print("\n>>> Step 5.5: Validating audio build consistency...")
     if not os.path.exists(system_json_path):
-        print("  [!] 找不到 System.json，无法执行音频一致性校验。")
+        print("  [!] System.json not found. Cannot validate audio consistency.")
         sys.exit(1)
 
     audio_dir = os.path.join(www_dir, "audio")
     if not os.path.exists(audio_dir):
-        print("  [!] 找不到 audio 目录，无法执行音频一致性校验。")
+        print("  [!] audio directory not found. Cannot validate audio consistency.")
         sys.exit(1)
 
     with open(system_json_path, "r", encoding="utf-8-sig") as file:
@@ -262,19 +262,19 @@ def validate_audio_consistency(www_dir, system_json_path):
                 m4a_files.add(base_without_ext)
 
     if has_encrypted_audio:
-        print("  [!] System.json 仍标记为 hasEncryptedAudio=true，构建产物状态非法。")
+        print("  [!] System.json still has hasEncryptedAudio=true. Build output is invalid.")
         sys.exit(1)
 
     if encrypted_files:
-        print(f"  [!] 发现 {len(encrypted_files)} 个残留加密音频文件，构建产物状态非法。")
+        print(f"  [!] Found {len(encrypted_files)} encrypted audio files remaining. Build output is invalid.")
         for rel_path in encrypted_files[:20]:
             print(f"      - {rel_path}")
         if len(encrypted_files) > 20:
-            print(f"      ... 其余 {len(encrypted_files) - 20} 个文件未展开")
+            print(f"      ... plus {len(encrypted_files) - 20} more files not shown")
         sys.exit(1)
 
     if not decrypted_ogg_files:
-        print("  [!] 未发现任何解密后的 .ogg 文件，构建产物状态非法。")
+        print("  [!] No decrypted .ogg files found. Build output is invalid.")
         sys.exit(1)
 
     for ogg_path in decrypted_ogg_files:
@@ -283,11 +283,11 @@ def validate_audio_consistency(www_dir, system_json_path):
             missing_m4a.append(os.path.relpath(ogg_path, www_dir))
 
     if missing_m4a:
-        print(f"  [!] 发现 {len(missing_m4a)} 个 .ogg 未生成对应 .m4a，构建产物状态非法。")
+        print(f"  [!] Found {len(missing_m4a)} .ogg files without matching .m4a files. Build output is invalid.")
         for rel_path in missing_m4a[:20]:
             print(f"      - {rel_path}")
         if len(missing_m4a) > 20:
-            print(f"      ... 其余 {len(missing_m4a) - 20} 个文件未展开")
+            print(f"      ... plus {len(missing_m4a) - 20} more files not shown")
         sys.exit(1)
 
-    print(f"  [+] 音频一致性校验通过：{len(decrypted_ogg_files)} 个 .ogg，{len(m4a_files)} 个 .m4a，无残留加密音频。")
+    print(f"  [+] Audio consistency validation passed: {len(decrypted_ogg_files)} .ogg files, {len(m4a_files)} .m4a files, no encrypted audio remains.")

@@ -1,6 +1,6 @@
 # Environment Requirements
 
-这份文档说明 `RPGMZ_pipline.py` 运行前需要准备什么，以及推荐的环境配置方式。
+这份文档说明 `rpgmaker_web_port.py` 运行前需要准备什么，以及推荐的环境配置方式。
 
 ## 当前已验证版本
 
@@ -131,14 +131,14 @@ mkdir -p "$XDG_CONFIG_HOME"
 单独测试部署时可以这样写：
 
 ```bash
-env XDG_CONFIG_HOME="$HOME/.codex/memories/.config" wrangler pages deploy www --project-name fgo-rpg --branch production
+env XDG_CONFIG_HOME="$HOME/.codex/memories/.config" wrangler pages deploy www --project-name demo-game --branch production
 ```
 
 ## 目录内必需文件
 
 脚本所在目录建议至少包含：
 
-- `RPGMZ_pipline.py`
+- `rpgmaker_web_port.py`
 - `_worker.js`
 - `vpad.html`
 
@@ -193,7 +193,7 @@ ffmpeg -codecs | rg aac
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
-python3 RPGMZ_pipline.py <项目名>
+python3 rpgmaker_web_port.py <项目名> --source ./Game
 ```
 
 默认是普通静态部署，不启用 KV 访问验证。
@@ -201,11 +201,11 @@ python3 RPGMZ_pipline.py <项目名>
 默认部署目标是 Cloudflare Pages。也可以选择其他部署目标：
 
 ```bash
-python3 RPGMZ_pipline.py <项目名> --deploy-target cloudflare
-python3 RPGMZ_pipline.py <项目名> --deploy-target local --output-dir ./dist/<项目名>
-python3 RPGMZ_pipline.py <项目名> --deploy-target local --serve-local --local-port 8080
-python3 RPGMZ_pipline.py <项目名> --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
-python3 RPGMZ_pipline.py <项目名> --deploy-target none
+python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target cloudflare
+python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target local --output-dir ./dist/<项目名>
+python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target local --serve-local --local-port 8080
+python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
+python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target none
 ```
 
 `custom` 部署命令会收到这些环境变量：
@@ -218,16 +218,18 @@ python3 RPGMZ_pipline.py <项目名> --deploy-target none
 如果需要访问码验证页，使用：
 
 ```bash
-python3 RPGMZ_pipline.py <项目名> --enable-kv-auth
+python3 rpgmaker_web_port.py <项目名> --source ./Game --enable-kv-auth
 ```
 
-如果 Cloudflare Pages 项目已经提前绑定好 `AUTH_CODES`，可以使用：
+如果 Cloudflare Pages 项目已经提前绑定好 `AUTH_CODES` 和 `ACCESS_SECRET_KEY`，可以使用：
 
 ```bash
-python3 RPGMZ_pipline.py <项目名> --enable-kv-auth --single-deploy
+python3 rpgmaker_web_port.py <项目名> --source ./Game --enable-kv-auth --single-deploy
 ```
 
 访问验证页只应表述为技术探索模拟器，不应使用商业发行或类似表述。
+
+公开发布前不要提交商业游戏资源、私有游戏包、真实 Cloudflare 凭证、访问码数据库或生成后的构建产物。这个仓库只应包含工具链本身。
 
 默认部署分支是：
 

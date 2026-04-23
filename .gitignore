@@ -1,8 +1,12 @@
 *
 !.gitignore
 !README.md
+!README.zh-CN.md
 !REQUIREMENTS.md
+!LICENSE
+!SECURITY.md
 !RPGMZ_pipline.py
+!rpgmaker_web_port.py
 !_worker.js
 !vpad.html
 !pipeline/

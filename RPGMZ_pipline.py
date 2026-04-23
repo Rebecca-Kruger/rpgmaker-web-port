@@ -18,10 +18,10 @@ def main():
     runtime = load_runtime_config()
 
     print("=" * 50)
-    print(" RPG Maker Web 全自动部署处理流 (MV/MZ 兼容版)")
+    print(" RPG Maker Web Port Toolkit (MV/MZ)")
     print("=" * 50)
 
-    prepare_www_workspace(runtime.base_dir, runtime.www_dir)
+    prepare_www_workspace(runtime.base_dir, runtime.www_dir, runtime.source_dir)
     clean_pc_build(runtime.www_dir)
     apply_mtools_translation(runtime.base_dir, runtime.www_dir)
     apply_patch(runtime.patch_zip, runtime.www_dir)
@@ -39,7 +39,7 @@ def main():
     deploy_build(final_project_name, runtime)
 
     print("\n" + "=" * 50)
-    print(f"\n 部署大功告成！游戏 [{runtime.game_name}] 已经在线上就绪！")
+    print(f"\n Deployment complete. Game [{runtime.game_name}] is ready.")
     print("=" * 50)
 
 

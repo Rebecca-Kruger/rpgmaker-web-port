@@ -8,6 +8,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class RuntimeConfig:
     base_dir: str
+    source_dir: str
     www_dir: str
     patch_zip: str
     system_json_path: str
@@ -36,8 +37,8 @@ class CloudflareCredentials:
 def load_runtime_config(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
-        print("❌ 错误：缺少游戏文件夹名称！")
-        print("💡 用法: python3 RPGMZ_pipline.py <项目名> [--deploy-target cloudflare|local|custom|none]")
+        print("[ERROR] Missing project name.")
+        print("Usage: python3 rpgmaker_web_port.py <project-name> [--source ./Game] [--deploy-target cloudflare|local|custom|none]")
         sys.exit(1)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,15 +46,18 @@ def load_runtime_config(argv=None):
     options = _parse_options(argv[1:])
     deploy_target = options.get("deploy_target", "cloudflare")
     if deploy_target not in {"cloudflare", "local", "custom", "none"}:
-        print(f"❌ 错误：未知部署目标 {deploy_target}")
-        print("💡 可选值: cloudflare, local, custom, none")
+        print(f"[ERROR] Unknown deploy target {deploy_target}")
+        print("Allowed values: cloudflare, local, custom, none")
         sys.exit(1)
     if deploy_target != "cloudflare" and options.get("enable_kv_auth", False):
-        print("❌ 错误：--enable-kv-auth 目前只支持 Cloudflare Pages 部署。")
+        print("[ERROR] --enable-kv-auth is currently supported only for Cloudflare Pages deployments.")
         sys.exit(1)
 
     local_port = int(options.get("local_port", "8080"))
-    www_dir = os.path.join(base_dir, "www")
+    source_dir = options.get("source_dir", "")
+    if source_dir:
+        source_dir = os.path.abspath(source_dir)
+    www_dir = os.path.abspath(options.get("build_dir") or os.path.join(base_dir, "www"))
     output_dir = options.get("output_dir")
     if output_dir:
         output_dir = os.path.abspath(output_dir)
@@ -61,6 +65,7 @@ def load_runtime_config(argv=None):
         output_dir = os.path.join(base_dir, "dist", game_name)
     return RuntimeConfig(
         base_dir=base_dir,
+        source_dir=source_dir,
         www_dir=www_dir,
         patch_zip=os.path.join(base_dir, "patch.zip"),
         system_json_path=os.path.join(www_dir, "data", "System.json"),
@@ -91,12 +96,16 @@ def _parse_options(args):
             options["enable_kv_auth"] = True
         elif arg == "--serve-local":
             options["serve_local"] = True
-        elif arg in {"--deploy-target", "--output-dir", "--custom-deploy-command", "--local-port"}:
+        elif arg in {"--source", "--build-dir", "--deploy-target", "--output-dir", "--custom-deploy-command", "--local-port"}:
             if index + 1 >= len(args):
-                print(f"❌ 错误：{arg} 缺少参数值")
+                print(f"[ERROR] {arg} requires a value")
                 sys.exit(1)
             value = args[index + 1]
-            if arg == "--deploy-target":
+            if arg == "--source":
+                options["source_dir"] = value
+            elif arg == "--build-dir":
+                options["build_dir"] = value
+            elif arg == "--deploy-target":
                 options["deploy_target"] = value
             elif arg == "--output-dir":
                 options["output_dir"] = value
@@ -106,7 +115,7 @@ def _parse_options(args):
                 options["local_port"] = value
             index += 1
         else:
-            print(f"❌ 错误：未知参数 {shlex.quote(arg)}")
+            print(f"[ERROR] Unknown argument {shlex.quote(arg)}")
             sys.exit(1)
         index += 1
     return options
@@ -114,21 +123,21 @@ def _parse_options(args):
 
 def load_cloudflare_credentials(credentials_path):
     if not os.path.exists(credentials_path):
-        print(f"  [!] 缺少 Cloudflare 凭证文件: {credentials_path}")
-        print("  [!] 请参考 cloudflare_credentials.json.example 创建实际配置文件。")
+        print(f"  [!] Missing Cloudflare credentials file: {credentials_path}")
+        print("  [!] Create a real config file from cloudflare_credentials.json.example.")
         sys.exit(1)
 
     try:
         with open(credentials_path, "r", encoding="utf-8") as f:
             credentials = json.load(f)
     except Exception as e:
-        print(f"  [!] Cloudflare 凭证文件解析失败: {e}")
+        print(f"  [!] Failed to parse Cloudflare credentials file: {e}")
         sys.exit(1)
 
     required_fields = ["account_id", "api_token"]
     missing_fields = [field for field in required_fields if not credentials.get(field)]
     if missing_fields:
-        print(f"  [!] Cloudflare 凭证缺少必要字段: {', '.join(missing_fields)}")
+        print(f"  [!] Cloudflare credentials missing required fields: {', '.join(missing_fields)}")
         sys.exit(1)
 
     return CloudflareCredentials(

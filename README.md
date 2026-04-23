@@ -1,5 +1,7 @@
 # RPGMZ Web Porting Toolkit
 
+Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
+
 Turn an RPG Maker MV/MZ Windows build into a mobile-friendly web build that can be deployed to Cloudflare Pages, a local directory, or a custom server.
 
 This project exists for a very specific pain:
@@ -74,26 +76,26 @@ This project is probably not for you if:
 
 ## Current Workflow
 
-The current entrypoint is still a single script:
+The public entrypoint is:
 
 ```bash
-python3 RPGMZ_pipline.py <project-name>
+python3 rpgmaker_web_port.py <project-name> --source ./Game
 ```
 
 Typical usage:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg
+python3 rpgmaker_web_port.py demo-game --source ./examples/MyGame --deploy-target local --output-dir ./dist/demo-game
 ```
 
 Choose a deployment target:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg --deploy-target cloudflare
-python3 RPGMZ_pipline.py fgo-rpg --deploy-target local --output-dir ./dist/fgo-rpg
-python3 RPGMZ_pipline.py fgo-rpg --deploy-target local --serve-local --local-port 8080
-python3 RPGMZ_pipline.py fgo-rpg --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
-python3 RPGMZ_pipline.py fgo-rpg --deploy-target none
+python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target cloudflare
+python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target local --output-dir ./dist/demo-game
+python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target local --serve-local --local-port 8080
+python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
+python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target none
 ```
 
 Deployment targets:
@@ -101,21 +103,21 @@ Deployment targets:
 - `cloudflare`: deploys to Cloudflare Pages, the default.
 - `local`: copies the final web build to a local directory.
 - `custom`: runs your own deployment command with build paths exposed as environment variables.
-- `none`: builds only and leaves the final output in `www/`.
+- `none`: builds only and leaves the final output in the build directory.
 
 Enable Cloudflare KV access verification only when you need a gated demo:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg --enable-kv-auth
+python3 rpgmaker_web_port.py demo-game --source ./Game --enable-kv-auth
 ```
 
-Use `--single-deploy` together with `--enable-kv-auth` only when the Cloudflare Pages project already has the `AUTH_CODES` KV binding configured:
+Use `--single-deploy` together with `--enable-kv-auth` only when the Cloudflare Pages project already has the `AUTH_CODES` KV binding and `ACCESS_SECRET_KEY` environment variable configured:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg --enable-kv-auth --single-deploy
+python3 rpgmaker_web_port.py demo-game --source ./Game --enable-kv-auth --single-deploy
 ```
 
-The script expects a full RPG Maker MV/MZ game directory under the repo root with at least:
+The source directory should be a full RPG Maker MV/MZ game directory with at least:
 
 - `index.html`
 - `js/`
@@ -123,12 +125,12 @@ The script expects a full RPG Maker MV/MZ game directory under the repo root wit
 
 ### Required Files
 
-- `RPGMZ_pipline.py`
+- `rpgmaker_web_port.py`
 - `vpad.html`
-- `cloudflare_credentials.json`
 
 ### Optional Files
 
+- `cloudflare_credentials.json` for Cloudflare deployment
 - `patch.zip`
 - `CN.json`
 - `_worker.js` if `--enable-kv-auth` is used
@@ -159,7 +161,10 @@ Example:
 
 By default, the pipeline deploys a normal static Cloudflare Pages build.
 
-If `--enable-kv-auth` is provided, the pipeline copies `_worker.js` into `www/` and enables a Cloudflare Pages Worker gate backed by a KV namespace binding named `AUTH_CODES`.
+If `--enable-kv-auth` is provided, the pipeline copies `_worker.js` into the build directory and enables a Cloudflare Pages Worker gate backed by:
+
+- `AUTH_CODES`: KV namespace binding
+- `ACCESS_SECRET_KEY`: Worker environment variable used for token signing
 
 The verification page describes the build as a technical exploration simulator. It should not present itself as an official or licensed product.
 
@@ -173,6 +178,12 @@ For `--deploy-target custom`, the command receives these environment variables:
 - `RPGMZ_BASE_DIR`
 
 This is intended for custom servers, Docker images, rsync/scp publishing, or later packaging the generated web runtime into a native wrapper.
+
+## Publishing Notes
+
+Do not commit commercial game assets, private game builds, real Cloudflare credentials, access-code databases, or generated build outputs. This repository should contain the toolkit only.
+
+Use this project only with games and assets you are allowed to process. The toolkit is a technical compatibility layer; it does not grant rights to distribute third-party game content.
 
 ## iPhone / iPad Debugging
 

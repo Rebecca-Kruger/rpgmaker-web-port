@@ -1,12 +1,8 @@
-// 你可以把这串字符换成任何你喜欢的乱码，这是你服务器的访问控制私钥
-// 绝对不要泄露给别人！
-const SECRET_KEY = "RPG_MAKER_SUPER_SECRET_KEY_2026";
-
-// 生成 HMAC-SHA256 加密签名
-async function createSignature(text) {
+// Generate an HMAC-SHA256 signature.
+async function createSignature(text, secretKey) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(SECRET_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    "raw", encoder.encode(secretKey), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
   );
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(text));
   return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -15,38 +11,42 @@ async function createSignature(text) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const secretKey = env.ACCESS_SECRET_KEY;
+    if (!secretKey) {
+      return new Response("Missing ACCESS_SECRET_KEY binding", { status: 500 });
+    }
 
     // ==========================================
-    // 1. API 接口：处理登录，只在这里消耗 1 次 KV 读取！
+    // 1. Login API. Only this endpoint performs a KV read.
     // ==========================================
     if (request.method === "POST" && url.pathname === "/api/auth") {
       try {
         const { hash } = await request.json();
-        const isValid = await env.AUTH_CODES.get(hash); // 查阅 KV 数据库
+        const isValid = await env.AUTH_CODES.get(hash); // Query KV storage.
         
         if (isValid) {
-          // 验证成功！计算过期时间（30天）
+          // Verification succeeded. Set a 30-day expiry.
           const exp = Date.now() + 1000 * 60 * 60 * 24 * 30;
           const payload = `${hash}.${exp}`;
-          // 用私钥给这个玩家签发一个独一无二的加密签名
-          const sig = await createSignature(payload);
-          const token = `${payload}.${sig}`; // 最终的通行证格式：哈希码.过期时间.签名
+          // Sign the payload with the private key.
+          const sig = await createSignature(payload, secretKey);
+          const token = `${payload}.${sig}`; // Token format: hash.expiry.signature
 
           const headers = new Headers();
-          // 把通行证种在玩家的浏览器里
+          // Store the token in the browser cookie jar.
           headers.append("Set-Cookie", `rpg_token=${token}; HttpOnly; Secure; Path=/; Max-Age=${60 * 60 * 24 * 30}`);
           headers.append("Content-Type", "application/json");
           return new Response(JSON.stringify({ success: true }), { headers });
         } else {
-          return new Response(JSON.stringify({ success: false, error: "访问码无效或已过期" }), { status: 401, headers: { "Content-Type": "application/json" } });
+          return new Response(JSON.stringify({ success: false, error: "Access code is invalid or expired" }), { status: 401, headers: { "Content-Type": "application/json" } });
         }
       } catch (err) {
-        return new Response(JSON.stringify({ success: false, error: "请求格式错误" }), { status: 400 });
+        return new Response(JSON.stringify({ success: false, error: "Invalid request payload" }), { status: 400 });
       }
     }
 
     // ==========================================
-    // 2. 边缘拦截器：纯数学解密验证，0 次 KV 读取！
+    // 2. Edge guard. Signature verification performs no KV reads.
     // ==========================================
     const cookieHeader = request.headers.get("Cookie") || "";
     const match = cookieHeader.match(/rpg_token=([^;]+)/);
@@ -56,29 +56,29 @@ export default {
       const token = match[1];
       const parts = token.split('.');
       
-      // 检查通行证格式是否完整 (哈希码.时间戳.签名)
+      // Validate token shape: hash.expiry.signature.
       if (parts.length === 3) {
         const [hash, exp, sig] = parts;
-        // 第一关：检查有没有过期
+        // First check: expiration.
         if (Date.now() < parseInt(exp)) {
-          // 第二关：服务器在内存中重新计算一次签名，比对是否一致（防止伪造）
-          const expectedSig = await createSignature(`${hash}.${exp}`);
+          // Second check: recompute the signature to prevent tampering.
+          const expectedSig = await createSignature(`${hash}.${exp}`, secretKey);
           if (sig === expectedSig) {
-            authorized = true; // 访问码正确，且签名一致。
+            authorized = true; // Access code is valid and the signature matches.
           }
         }
       }
     }
 
     // ==========================================
-    // 3. 放行游戏资源，或者打回登录页
+    // 3. Serve game assets or return the access page.
     // ==========================================
     if (authorized) {
-      // 身份完全合法，秒速放行静态资源，全程不碰 KV 数据库
+      // Valid token: serve static assets without touching KV.
       return env.ASSETS ? env.ASSETS.fetch(request) : fetch(request); 
     }
 
-    // 没通行证，或者伪造通行证，直接拦截并展示登录页
+    // Missing or invalid token: show the access page.
     return new Response(loginHTML, {
       headers: { "Content-Type": "text/html;charset=UTF-8" },
     });
@@ -86,15 +86,15 @@ export default {
 };
 
 // ==========================================
-// 4. 高颜值登录界面 UI
+// 4. Access page UI.
 // ==========================================
 const loginHTML = `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>技术探索模拟器</title>
+    <title>Technical Exploration Runtime</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
@@ -113,11 +113,11 @@ const loginHTML = `
 <body>
     <div class="bg-glow"></div>
     <div class="container">
-        <h1>技术探索模拟器</h1>
-        <p>请输入用于技术测试的访问码</p>
+        <h1>Technical Exploration Runtime</h1>
+        <p>Enter the access code for technical testing</p>
         <input type="text" id="hash-input" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocorrect="off" spellcheck="false">
-        <button onclick="verifyCode()">验证并接入</button>
-        <div id="error-msg" class="error">访问码错误，请重新输入</div>
+        <button onclick="verifyCode()">Verify and Launch</button>
+        <div id="error-msg" class="error">Invalid access code. Please try again.</div>
     </div>
 
     <script>
@@ -139,9 +139,9 @@ const loginHTML = `
             const errorMsg = document.getElementById('error-msg');
             const btn = document.querySelector('button');
             
-            if(!hash) { errorMsg.style.display = 'block'; errorMsg.innerText = '访问码不能为空'; return; }
+            if(!hash) { errorMsg.style.display = 'block'; errorMsg.innerText = 'Access code is required'; return; }
             
-            btn.innerText = '正在验证安全签名...';
+            btn.innerText = 'Verifying secure signature...';
             btn.disabled = true;
 
             try {
@@ -154,20 +154,20 @@ const loginHTML = `
                 const data = await res.json();
                 
                 if (data.success) {
-                    btn.innerText = '接入成功！正在装载游戏...';
+                    btn.innerText = 'Access granted. Loading game...';
                     btn.style.background = '#30d158';
                     errorMsg.style.display = 'none';
                     setTimeout(() => window.location.href = window.location.pathname + window.location.search + window.location.hash, 800);
                 } else {
-                    btn.innerText = '验证并接入';
+                    btn.innerText = 'Verify and Launch';
                     btn.disabled = false;
                     errorMsg.innerText = data.error;
                     errorMsg.style.display = 'block';
                 }
             } catch (err) {
-                btn.innerText = '验证并接入';
+                btn.innerText = 'Verify and Launch';
                 btn.disabled = false;
-                errorMsg.innerText = '网络连接异常，请检查网络';
+                errorMsg.innerText = 'Network error. Please check your connection.';
                 errorMsg.style.display = 'block';
             }
         }

@@ -7,8 +7,8 @@ import zipfile
 
 
 def clean_pc_build(www_dir):
-    """步骤 0: 清洗 PC 版冗余文件 (剥离 NW.js 外壳)，提取纯净 Web 核心"""
-    print("\n🧹 [Step 0] 开始清洗 PC 版冗余文件 (剥离 NW.js 外壳)...")
+    """Step 0: remove desktop-only NW.js files from a PC export."""
+    print("\n[Step 0] Cleaning desktop-only NW.js files from the PC export...")
 
     dirs_to_remove = ["locales", "swiftshader", "save"]
     for directory in dirs_to_remove:
@@ -16,9 +16,9 @@ def clean_pc_build(www_dir):
         if os.path.exists(dir_path):
             try:
                 shutil.rmtree(dir_path)
-                print(f"   🗑️ 已销毁目录: {directory}/")
+                print(f"   Removed directory: {directory}/")
             except Exception as exc:
-                print(f"   ⚠️ 无法删除目录 {directory}/: {exc}")
+                print(f"   Failed to remove directory {directory}/: {exc}")
 
     files_to_remove = ["*.exe", "*.dll", "*.pak", "*.bin", "*.dat", "package.json"]
     clean_count = 0
@@ -26,30 +26,30 @@ def clean_pc_build(www_dir):
         for file_path in glob.glob(os.path.join(www_dir, pattern)):
             try:
                 os.remove(file_path)
-                print(f"   🗑️ 已销毁文件: {os.path.basename(file_path)}")
+                print(f"   Removed file: {os.path.basename(file_path)}")
                 clean_count += 1
             except Exception as exc:
-                print(f"   ⚠️ 无法删除 {os.path.basename(file_path)}: {exc}")
+                print(f"   Failed to remove {os.path.basename(file_path)}: {exc}")
 
     if clean_count == 0:
-        print("   ✨ 未发现冗余文件，当前已经是纯净 Web 环境。")
+        print("   No desktop-only files found. The workspace already looks web-ready.")
     else:
-        print(f"   ✅ 清洗完毕！共清理 {clean_count} 个冗余文件。")
+        print(f"   Cleanup complete. Removed {clean_count} desktop-only files.")
 
 
 def apply_mtools_translation(base_dir, www_dir):
-    """外科手术式 MTools 汉化注入"""
+    """Apply MTools translation data without touching audio references."""
     cn_json_path = os.path.join(base_dir, "CN.json")
     if not os.path.exists(cn_json_path):
-        print("\n [-] 未发现 CN.json，跳过 MTools 文本汉化注入。")
+        print("\n [-] CN.json not found. Skipping MTools translation injection.")
         return
 
-    print("\n>>> 发现 CN.json，正在启动外科手术级底层文本注入...")
+    print("\n>>> CN.json found. Injecting translated text into data files...")
     try:
         with open(cn_json_path, "r", encoding="utf-8") as file:
             translation_dict = json.load(file)
     except Exception as exc:
-        print(f"  [!] CN.json 解析失败: {exc}")
+        print(f"  [!] Failed to parse CN.json: {exc}")
         return
 
     def translate_node(node):
@@ -127,26 +127,26 @@ def apply_mtools_translation(base_dir, www_dir):
             modified_files += 1
         except Exception:
             pass
-    print(f"  [√] 注入完成！处理了 {modified_files} 个数据文件。")
+    print(f"  [+] Translation injection complete. Processed {modified_files} data files.")
 
 
 def apply_patch(patch_zip, www_dir):
-    """解压汉化补丁并覆盖到 www 目录"""
-    print("\n>>> 步骤 1: 检查汉化补丁...")
+    """Extract patch.zip into the web workspace."""
+    print("\n>>> Step 1: Checking optional patch.zip...")
     if not os.path.exists(patch_zip):
-        print("  [-] 未发现 patch.zip，跳过补丁覆盖。")
+        print("  [-] patch.zip not found. Skipping patch merge.")
         return
-    print(f"  [+] 发现 {patch_zip}，正在解压...")
+    print(f"  [+] Found {patch_zip}, extracting...")
     with zipfile.ZipFile(patch_zip, "r") as zip_ref:
         zip_ref.extractall(www_dir)
-    print("  [+] 汉化补丁合并完成！")
+    print("  [+] Patch merge complete.")
 
 
 def patch_system_json(system_json_path):
-    """解析 System.json 关闭加密，并提取密钥"""
-    print("\n>>> 步骤 3: 解析 System.json 并提取密钥...")
+    """Disable encryption flags in System.json and extract the encryption key."""
+    print("\n>>> Step 3: Parsing System.json and extracting the encryption key...")
     if not os.path.exists(system_json_path):
-        print("  [!] 找不到 System.json，请确认是否为标准的 MV/MZ 游戏。")
+        print("  [!] System.json not found. Confirm this is a standard MV/MZ project.")
         return None
 
     with open(system_json_path, "r", encoding="utf-8-sig") as file:
@@ -164,16 +164,16 @@ def patch_system_json(system_json_path):
     if modified:
         with open(system_json_path, "w", encoding="utf-8") as file:
             json.dump(data, file, ensure_ascii=False, separators=(",", ":"))
-        print("  [+] 成功关闭 System.json 中的加密标志。")
+        print("  [+] Encryption flags disabled in System.json.")
 
     if key_hex:
-        print(f"  [+] 提取到 32 位密钥: {key_hex}")
+        print(f"  [+] Extracted 32-character encryption key: {key_hex}")
         return bytes.fromhex(key_hex)
     return None
 
 
 def _decrypt_single_file(file_path, key_bytes, target_ext):
-    """处理单个加密文件的异或解密"""
+    """Decrypt one encrypted RPG Maker asset."""
     try:
         with open(file_path, "rb") as file:
             header = file.read(16)
@@ -194,15 +194,15 @@ def _decrypt_single_file(file_path, key_bytes, target_ext):
         os.remove(file_path)
         return True
     except Exception as exc:
-        print(f"  [!] 解密失败 {file_path}: {str(exc)}")
+        print(f"  [!] Failed to decrypt {file_path}: {str(exc)}")
         return False
 
 
 def decrypt_assets(www_dir, key_bytes):
-    """批量解密资源文件 (适配 MZ 与 MV 后缀)"""
-    print("\n>>> 步骤 4: 批量全速解密资源文件 (兼容 MZ/MV)...")
+    """Batch-decrypt asset files for MV/MZ suffixes."""
+    print("\n>>> Step 4: Decrypting asset files for MV/MZ...")
     if not key_bytes:
-        print("  [-] 缺少密钥，跳过解密。")
+        print("  [-] Encryption key missing. Skipping decryption.")
         return
 
     img_count = 0
@@ -221,12 +221,12 @@ def decrypt_assets(www_dir, key_bytes):
                 if _decrypt_single_file(file_path, key_bytes, ".m4a"):
                     audio_count += 1
 
-    print(f"  [+] 全量解密完成！共安全解密了 {img_count} 张图片，{audio_count} 个音频。")
+    print(f"  [+] Decryption complete. Decrypted {img_count} images and {audio_count} audio files.")
 
 
 def convert_video_to_mp4(www_dir):
-    """将 movies 目录下的 .webm 转换为 .mp4"""
-    print("\n>>> 步骤: 扫描并转换视频格式为 mp4...")
+    """Convert .webm movies to .mp4."""
+    print("\n>>> Scanning and converting movies to mp4...")
     movies_dir = os.path.join(www_dir, "movies")
     if not os.path.exists(movies_dir):
         return
@@ -253,12 +253,12 @@ def convert_video_to_mp4(www_dir):
                     converted_count += 1
             except Exception:
                 pass
-    print(f"  [+] 视频转码完成，处理了 {converted_count} 个文件。")
+    print(f"  [+] Video conversion complete. Converted {converted_count} files.")
 
 
 def fix_resource_percent_symbols(target_dir):
-    """修复资源文件名中的 % 符号"""
-    print("\n>>> 步骤 7: 开始清理目录中的 % 符号...")
+    """Replace percent symbols in resource filenames."""
+    print("\n>>> Step 7: Replacing percent symbols in resource filenames...")
     img_dir = os.path.join(target_dir, "img")
     data_dir = os.path.join(target_dir, "data")
     renamed_map = {}
@@ -293,4 +293,4 @@ def fix_resource_percent_symbols(target_dir):
                 if modified:
                     with open(file_path, "w", encoding="utf-8") as file:
                         file.write(content)
-    print("  [+] 资源符号修复完成！")
+    print("  [+] Resource filename cleanup complete.")

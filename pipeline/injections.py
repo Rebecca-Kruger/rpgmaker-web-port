@@ -5,11 +5,11 @@ import sys
 
 
 def patch_problematic_plugin_params(www_dir):
-    """只修复当前已定位的高风险插件参数，不做全量重写。"""
-    print("\n>>> 步骤 6: 定点修复 iOS 高风险插件参数...")
+    """Patch only known high-risk plugin parameters."""
+    print("\n>>> Step 6: Patching known iOS-risk plugin parameters...")
     plugins_path = os.path.join(www_dir, "js", "plugins.js")
     if not os.path.exists(plugins_path):
-        print("  [-] 未找到 plugins.js，跳过插件参数修复。")
+        print("  [-] plugins.js not found. Skipping plugin parameter patch.")
         return
 
     with open(plugins_path, "r", encoding="utf-8") as file:
@@ -18,7 +18,7 @@ def patch_problematic_plugin_params(www_dir):
     start = content.find("[")
     end = content.rfind("]")
     if start == -1 or end == -1 or end < start:
-        print("  [!] plugins.js 格式异常，跳过插件参数修复。")
+        print("  [!] plugins.js format is invalid. Skipping plugin parameter patch.")
         return
 
     prefix = content[:start]
@@ -33,7 +33,7 @@ def patch_problematic_plugin_params(www_dir):
                 params["bootCachePictures"] = "false"
                 plugin["parameters"] = params
                 changed = True
-                print("  [+] 已关闭 LL_StandingPicture 的启动预缓存 (bootCachePictures=false)")
+                print("  [+] Disabled LL_StandingPicture boot-time picture preloading (bootCachePictures=false)")
 
     if changed:
         with open(plugins_path, "w", encoding="utf-8") as file:
@@ -41,16 +41,16 @@ def patch_problematic_plugin_params(www_dir):
             json.dump(plugins, file, ensure_ascii=False, indent=2)
             file.write(suffix if suffix else ";\n")
     else:
-        print("  [-] 未发现需要修复的目标插件参数。")
+        print("  [-] No target plugin parameters needed patching.")
 
 
 def patch_runtime_injections(www_dir, vpad_html_path):
-    """向 index.html 和引擎 JS 注入 Web/iOS 运行时兼容补丁。"""
-    print("\n>>> 步骤 2: 注入跨平台兼容补丁、移动端手柄与引擎物理降维打击...")
+    """Inject Web/iOS runtime compatibility patches into index.html and engine JS."""
+    print("\n>>> Step 2: Injecting runtime compatibility patches and mobile controls...")
     index_path = os.path.join(www_dir, "index.html")
 
     if not os.path.exists(index_path):
-        print("  [!] 致命错误：找不到 index.html，流水线强制终止！")
+        print("  [!] Fatal error: index.html not found. Stopping pipeline.")
         sys.exit(1)
 
     with open(index_path, "r", encoding="utf-8") as file:
@@ -63,48 +63,48 @@ def patch_runtime_injections(www_dir, vpad_html_path):
 
     with open(index_path, "w", encoding="utf-8") as file:
         file.write(html_content)
-    print("  [+] index.html 注入内容已成功物理落盘！")
+    print("  [+] index.html injection written to disk.")
 
     _patch_storage_and_audio_ext(www_dir)
     _patch_m4a_decoder_guard(www_dir)
     _patch_mobile_animation_throttle(www_dir)
-    print("  [√] 步骤 2 执行完毕，游戏运行环境已固化！")
+    print("  [+] Step 2 complete. Runtime compatibility layer is in place.")
 
 
 def _inject_environment_mock(html_content):
-    mock_begin = "<!-- [Nix Inject Begin] -->"
-    mock_end = "<!-- [Nix Inject End] -->"
+    mock_begin = "<!-- [RPGMZ Toolkit Inject Begin] -->"
+    mock_end = "<!-- [RPGMZ Toolkit Inject End] -->"
     mock_script = """
-        <!-- [Nix Inject Begin] -->
+        <!-- [RPGMZ Toolkit Inject Begin] -->
         <script type="text/javascript">
-            // 1. 提前抢占底层环境判断！
+            // 1. Override environment checks before the engine boots.
             window.Utils = window.Utils || {};
             window.Utils.isNwjs = function() { return false; };
-            window.Utils.isMobileDevice = function() { return true; }; // 顺便开启移动端优化
+            window.Utils.isMobileDevice = function() { return true; }; // Enable mobile optimizations.
 
             window.process = {
                 env: {},
                 mainModule: { filename: 'index.html' },
                 platform: 'browser',
-                arch: 'x64',  // 伪造 64 位系统架构
-                versions: { node: '14.16.0', nw: '0.49.2' }, // 伪造较新的 PC 引擎版本号，防止插件嫌弃环境太老
-                argv: [], // 伪造空启动参数，避免 includes 报错
-                execPath: '/Game.exe', // 伪造可执行文件路径
-                cwd: function() { return '/'; }, // 伪造根目录
-                chdir: function(dir) { return; }, // 拦截更改目录指令
+                arch: 'x64',  // Mock a 64-bit architecture.
+                versions: { node: '14.16.0', nw: '0.49.2' }, // Mock a newer NW.js runtime version for plugin compatibility.
+                argv: [], // Mock empty launch arguments.
+                execPath: '/Game.exe', // Mock executable path.
+                cwd: function() { return '/'; }, // Mock root directory.
+                chdir: function(dir) { return; }, // Ignore chdir calls.
                 exit: function() {
-                    console.warn('[Nix 防火墙] 拦截了退出游戏指令');
-                    // 网页端无法直接关闭标签页，可以重定向到主页，或者直接忽略
+                    console.warn('[RPGMZ Web Toolkit] Blocked game exit call');
+                    // Browsers cannot close the tab directly; ignore or redirect if needed.
                     // window.location.href = '/';
                 },
                 on: function(event, callback) {
-                    console.warn('[Nix 防火墙] 拦截并挂起了系统级事件监听: ' + event);
-                    return this; // 返回 this 以支持链式调用，例如 process.on().on()
+                    console.warn('[RPGMZ Web Toolkit] Blocked unsupported process event listener: ' + event);
+                    return this; // Return this to support chained calls such as process.on().on().
                 },
-                uptime: function() { return performance.now() / 1000; }, // 伪造开机时间，防某些计时插件报错
-                // 高精度计时器伪造 (专治 Effekseer 粒子特效引擎崩溃)
+                uptime: function() { return performance.now() / 1000; }, // Mock uptime for plugins that expect it.
+                // Mock high-resolution timing for Effekseer compatibility.
                 hrtime: function(prev) {
-                    var now = performance.now(); // 浏览器自带高精度毫秒
+                    var now = performance.now(); // Browser-provided high-resolution milliseconds.
                     var sec = Math.floor(now / 1000);
                     var nano = Math.floor((now % 1000) * 1000000);
                     if (prev) {
@@ -119,7 +119,7 @@ def _inject_environment_mock(html_content):
                 }
             };
 
-            // 2. [究极防弹形态] 完美模拟 NW.js 环境并带有雷达监控
+            // 2. [Defensive mock mode] Mock NW.js APIs and log unsupported calls.
             const createNwMock = () => {
                 const mock = new Proxy(function() {}, {
                     get: (target, prop) => {
@@ -127,9 +127,9 @@ def _inject_environment_mock(html_content):
                             if (prop === Symbol.toPrimitive) return (hint) => hint === 'number' ? 0 : '';
                             return Reflect.get(target, prop);
                         }
-                        // 遇到特殊的方法，在浏览器的控制台打印出来
+                        // Log unsupported calls in the browser console.
                         if (typeof prop === 'string' && prop !== 'then') {
-                            console.warn(`[Nix 防火墙] 游戏尝试调用了不受支持的 PC 模块/属性: ${prop}`);
+                            console.warn(`[RPGMZ Web Toolkit] Game tried to access unsupported desktop module/property: ${prop}`);
                         }
                         if (prop === 'then') return undefined;
                         if (prop === 'toString' || prop === 'valueOf') return () => '';
@@ -145,11 +145,11 @@ def _inject_environment_mock(html_content):
             };
             window.nw = createNwMock();
 
-            // 3. 劫持 require，同时给 fs 加上防空指针保护
+            // 3. Intercept require() and provide safe fs/path stubs.
             window.require = function(moduleName) {
                 if (moduleName === 'fs') return {
                     existsSync: function(){return false;},
-                    // 核心修改：返回 "{}" 而不是 ""，如果插件强行读取，JSON.parse 不会报错产生 null！
+                    // Return "{}" so JSON.parse does not fail when plugins force-read config files.
                     readFileSync: function(){return "{}";},
                     writeFileSync: function(){return true;},
                     mkdirSync: function(){return true;},
@@ -160,7 +160,7 @@ def _inject_environment_mock(html_content):
                 return {};
             };
 
-            // 4. 提前解锁媒体上下文，避免 iOS/移动浏览器在动画 SE 首次播放时报 NotAllowedError
+            // 4. Prepare media unlock hooks for iOS/mobile browsers.
             (function() {
                 let unlocked = false;
                 const tryUnlockMedia = function() {
@@ -185,17 +185,17 @@ def _inject_environment_mock(html_content):
             })();
 
         </script>
-        <!-- [Nix Inject End] -->
+        <!-- [RPGMZ Toolkit Inject End] -->
         """
     if mock_begin in html_content and mock_end in html_content:
         html_content = re.sub(
-            r"<!-- \[Nix Inject Begin\] -->.*?<!-- \[Nix Inject End\] -->",
+            r"<!-- \[RPGMZ Toolkit Inject Begin\] -->.*?<!-- \[RPGMZ Toolkit Inject End\] -->",
             lambda _match: mock_script,
             html_content,
             count=1,
             flags=re.DOTALL,
         )
-        print("  [+] Proxy 监控防火墙已更新。")
+        print("  [+] Web runtime compatibility shim updated.")
     elif "window.require = function" not in html_content:
         html_content = re.sub(
             r"(<script)",
@@ -204,15 +204,15 @@ def _inject_environment_mock(html_content):
             count=1,
             flags=re.IGNORECASE,
         )
-        print("  [+] Proxy 监控防火墙注入成功！")
+        print("  [+] Web runtime compatibility shim injected.")
     return html_content
 
 
 def _inject_audio_debug_panel(html_content):
-    debug_begin = "<!-- [Nix Audio Debug Begin] -->"
-    debug_end = "<!-- [Nix Audio Debug End] -->"
+    debug_begin = "<!-- [RPGMZ Toolkit Audio Debug Begin] -->"
+    debug_end = "<!-- [RPGMZ Toolkit Audio Debug End] -->"
     debug_script = """
-        <!-- [Nix Audio Debug Begin] -->
+        <!-- [RPGMZ Toolkit Audio Debug Begin] -->
         <script type="text/javascript">
             (function() {
                 const search = new URLSearchParams(window.location.search);
@@ -513,17 +513,17 @@ def _inject_audio_debug_panel(html_content):
                 hookWhenReady();
             })();
         </script>
-        <!-- [Nix Audio Debug End] -->
+        <!-- [RPGMZ Toolkit Audio Debug End] -->
         """
     if debug_begin in html_content and debug_end in html_content:
         html_content = re.sub(
-            r"<!-- \[Nix Audio Debug Begin\] -->.*?<!-- \[Nix Audio Debug End\] -->",
+            r"<!-- \[RPGMZ Toolkit Audio Debug Begin\] -->.*?<!-- \[RPGMZ Toolkit Audio Debug End\] -->",
             lambda _match: debug_script,
             html_content,
             count=1,
             flags=re.DOTALL,
         )
-        print("  [+] 音频调试面板已更新。")
+        print("  [+] Audio debug panel updated.")
     else:
         html_content = re.sub(
             r"(<script)",
@@ -532,7 +532,7 @@ def _inject_audio_debug_panel(html_content):
             count=1,
             flags=re.IGNORECASE,
         )
-        print("  [+] 音频调试面板注入成功。")
+        print("  [+] Audio debug panel injected.")
     return html_content
 
 
@@ -555,9 +555,9 @@ def _inject_virtual_gamepad(html_content, vpad_html_path):
         with open(vpad_html_path, "r", encoding="utf-8") as file:
             gamepad_code = file.read()
         html_content = html_content.replace("</body>", "\n" + gamepad_code + "\n</body>")
-        print("  [+] 从 vpad.html 成功读取并注入虚拟手柄模块！")
+        print("  [+] Loaded and injected virtual gamepad from vpad.html.")
     else:
-        print("  [-] 未发现手柄文件，本次部署将跳过虚拟手柄注入。")
+        print("  [-] vpad.html not found. Skipping virtual gamepad injection.")
     return html_content
 
 
@@ -573,12 +573,12 @@ def _patch_storage_and_audio_ext(www_dir):
         with open(file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
-        if "[Nix Pipeline Inject]" not in content:
+        if "[RPGMZ Toolkit Inject]" not in content:
             with open(file_path, "a", encoding="utf-8") as file:
                 file.write("""\n
 // ==========================================
-// [Nix Pipeline Inject] 物理级强制 Web 存储锁
-// 彻底覆盖原引擎的 isNwjs 和 isLocalMode 判定！
+// [RPGMZ Toolkit Inject] Force browser storage mode.
+// Override engine isNwjs and isLocalMode checks.
 // ==========================================
 if (typeof Utils !== 'undefined') {
     Utils.isNwjs = function() { return false; };
@@ -595,15 +595,15 @@ if (typeof AudioManager !== 'undefined') {
         return isIOSDevice ? ".m4a" : ".ogg";
     };
 }
-console.log("🔒 [Nix 降维打击] 引擎已物理锁死 Web 异步存档模式，PC 路线被切断！");
+console.log("🔒 [RPGMZ Web Toolkit] Web storage mode enforced for browser runtime.");
 """)
-            print(f"  [√] 成功物理篡改引擎底层文件: {filename}")
+            print(f"  [+] Engine compatibility patch appended to: {filename}")
         else:
-            print(f"  [-] 引擎文件 {filename} 已被锁定，跳过。")
+            print(f"  [-] Engine file {filename} already patched. Skipping.")
         patched = True
 
     if not patched:
-        print("  [!] 警告：未找到 managers.js 核心文件，当前可能不是标准 MV/MZ 工程！")
+        print("  [!] Warning: managers.js not found. This may not be a standard MV/MZ project.")
 
 
 def _patch_m4a_decoder_guard(www_dir):
@@ -614,15 +614,15 @@ def _patch_m4a_decoder_guard(www_dir):
     with open(core_path, "r", encoding="utf-8") as file:
         managers_content = file.read()
 
-    if "[Nix Pipeline Inject] iOS m4a decoder guard" in managers_content:
-        print("  [-] rmmz_managers.js 已存在 iOS m4a 解码保护补丁，跳过。")
+    if "[RPGMZ Toolkit Inject] iOS m4a decoder guard" in managers_content:
+        print("  [-] rmmz_managers.js already has the iOS m4a decoder guard. Skipping.")
         return
 
     with open(core_path, "a", encoding="utf-8") as file:
         file.write("""\n
 // ==========================================
-// [Nix Pipeline Inject] iOS m4a decoder guard
-// m4a 必须走浏览器原生解码，不能误进 VorbisDecoder(ogg 专用)。
+// [RPGMZ Toolkit Inject] iOS m4a decoder guard
+// m4a must use native browser decoding, not the OGG-only VorbisDecoder path.
 // ==========================================
 (function() {
     if (typeof WebAudio === 'undefined') return;
@@ -636,27 +636,27 @@ def _patch_m4a_decoder_guard(www_dir):
     };
 })();
 """)
-    print("  [√] 已注入 iOS m4a 解码保护补丁: rmmz_managers.js")
+    print("  [+] Injected iOS m4a decoder guard into: rmmz_managers.js")
 
 
 def _patch_mobile_animation_throttle(www_dir):
     sprites_path = os.path.join(www_dir, "js", "rmmz_sprites.js")
     if not os.path.exists(sprites_path):
-        print("  [!] 警告：未找到 rmmz_sprites.js，跳过动画限流补丁。")
+        print("  [!] Warning: rmmz_sprites.js not found. Skipping animation throttle patch.")
         return
 
     with open(sprites_path, "r", encoding="utf-8") as file:
         sprites_content = file.read()
 
-    if "[Nix Pipeline Inject] Mobile animation throttle" in sprites_content:
-        print("  [-] rmmz_sprites.js 已存在动画限流补丁，跳过。")
+    if "[RPGMZ Toolkit Inject] Mobile animation throttle" in sprites_content:
+        print("  [-] rmmz_sprites.js already has the animation throttle patch. Skipping.")
         return
 
     with open(sprites_path, "a", encoding="utf-8") as file:
         file.write("""\n
 // ==========================================
-// [Nix Pipeline Inject] Mobile animation throttle
-// 限制移动端短时间内连续启动 Effekseer 动画，降低 iOS 上的随机 RangeError。
+// [RPGMZ Toolkit Inject] Mobile animation throttle
+// Throttle rapid mobile Effekseer animation starts to reduce iOS RangeError risk.
 // ==========================================
 (function() {
     if (typeof Sprite_Animation === "undefined") return;
@@ -683,4 +683,4 @@ def _patch_mobile_animation_throttle(www_dir):
     };
 })();
 """)
-    print("  [√] 已注入移动端动画限流补丁: rmmz_sprites.js")
+    print("  [+] Injected mobile animation throttle into: rmmz_sprites.js")
