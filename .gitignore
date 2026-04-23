@@ -5,5 +5,7 @@
 !RPGMZ_pipline.py
 !_worker.js
 !vpad.html
+!pipeline/
+!pipeline/*.py
 cloudflare_credentials.json
 !cloudflare_credentials.json.example

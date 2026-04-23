@@ -1,140 +1,233 @@
-# RPGMZ Pipeline
+# RPGMZ Web Porting Toolkit
 
-`RPGMZ_pipline.py` 用来把 RPG Maker MV/MZ 的 PC 版目录处理成可网页部署的 `www`，并直接发布到 Cloudflare Pages。
+Turn an RPG Maker MV/MZ Windows build into a mobile-friendly web build and deploy it to Cloudflare Pages with one pipeline.
 
-## 功能
+This project exists for a very specific pain:
 
-- 自动识别当前目录下的完整游戏目录，并复制为 `www`
-- 清理 PC/NW.js 冗余文件
-- 可选合并 `patch.zip`
-- 可选注入 `CN.json` 文本汉化
-- 修改 `index.html`，注入浏览器兼容层和虚拟手柄
-- 强制引擎走 Web 存档模式
-- iPhone/iPad 强制走 `m4a`，其他平台继续使用 `ogg`
-- 给 `rmmz_managers.js` 注入 iOS `m4a` 解码保护，避免 `m4a` 误进 `VorbisDecoder`
-- 给 `rmmz_sprites.js` 注入移动端动画限流补丁
-- 关闭 `System.json` 的资源加密标记并解密图片/音频
-- 批量把 `ogg/wav` 转为 `m4a`
-- 将非 ASCII 音频文件名统一改为 ASCII 安全名，并自动重写 `data/*.json` 与 `js/plugins.js` 引用
-- 在部署前执行音频一致性校验，发现加密残留、缺失转码或状态不一致时直接终止
-- 可通过 `?audioDebug=1` 打开 iPhone 端音频调试面板，用于排查播放链问题
-- 把 `webm` 转为 `mp4`
-- 修复部分插件参数和资源文件名问题
-- 注入 `_worker.js` 并部署到 Cloudflare Pages
+- PC exports are not directly usable on the web
+- iPhone/iPad audio compatibility is easy to break
+- encrypted assets, non-ASCII filenames, NW.js leftovers, and plugin edge cases turn into deployment bugs
+- most guides stop at “it boots in browser”, not “it actually works on mobile Safari”
 
-## 目录约定
+This toolkit is opinionated. It is not trying to be a generic game engine framework. It is trying to solve the ugly last-mile problems of shipping real RPG Maker games to the web.
 
-脚本默认在自己的所在目录工作。
+## Why This Project Exists
 
-必需文件：
+If you have ever tried to deploy an RPG Maker MV/MZ game as a web game, you have probably run into some combination of:
 
-- `RPGMZ_pipline.py`
-- `_worker.js`
-- `vpad.html`
+- encrypted audio and image assets that still expect desktop behavior
+- iOS Safari failing on some `.ogg` files but not others
+- non-ASCII filenames that look fine locally and then fail in browser delivery chains
+- NW.js desktop files bloating the package
+- plugin behavior that works on desktop but breaks mobile browser assumptions
+- no practical way to debug audio on iPhone without going half blind in remote devtools
 
-可选文件：
+This repository packages those fixes into one build flow.
 
-- `patch.zip`
-- `CN.json`
-- `cloudflare_credentials.json`
+## What It Does
 
-输入目录要求：
+Current pipeline capabilities:
 
-- 当前目录下存在一个完整游戏目录
-- 该目录至少包含 `index.html`、`js/`、`data/`
+- detects a full MV/MZ game folder and rebuilds a clean `www/` workspace
+- strips NW.js/desktop-only files from PC exports
+- optionally merges `patch.zip`
+- optionally injects `CN.json` translation content
+- disables RPG Maker asset encryption flags and decrypts image/audio assets
+- converts audio to `m4a` for iPhone/iPad compatibility
+- forces iPhone/iPad builds to request `m4a`, while other platforms keep `ogg`
+- prevents `m4a` from being incorrectly routed into the `VorbisDecoder` path
+- normalizes non-ASCII audio filenames to ASCII-safe names and rewrites references
+- validates audio build consistency before deployment
+- converts `webm` movies to `mp4`
+- injects browser compatibility patches, mobile controls, and selected runtime fixes
+- injects optional iPhone-side audio debugging via `?audioDebug=1`
+- deploys the final build to Cloudflare Pages
 
-运行时会生成：
+## Why It Is Different From Random Scripts
 
-- `www/`：处理后的网页工作目录
+Most one-off scripts can “make the title screen appear in a browser”.
 
-## 依赖
+This project is trying to be useful one level deeper:
 
-- `python3`
-- `ffmpeg`
-- `wrangler`
+- it treats iOS audio as a first-class deployment problem
+- it validates the final output instead of trusting the build blindly
+- it includes a real device debugging path for Safari audio failures
+- it handles filename normalization and reference rewriting instead of punting that work to the user
+- it keeps the final deployment step in the same toolchain
 
-脚本内部直接使用环境变量部署：
+That is the real value proposition: not just browser boot, but browser delivery hardening.
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
+## Who This Is For
 
-但这两个值不是写死在脚本里，而是从仓库根目录下的 `cloudflare_credentials.json` 读取。
+This project is a good fit if you are:
 
-模板文件：
+- shipping an RPG Maker MV/MZ game as a browser game
+- targeting iPhone/iPad as real supported devices
+- deploying to Cloudflare Pages
+- tired of manually patching `index.html`, audio files, and runtime JS every time
 
-- `cloudflare_credentials.json.example`
+This project is probably not for you if:
 
-实际使用文件：
+- you want a generic RPG Maker plugin framework
+- you need a polished GUI app instead of a build pipeline
+- you are not deploying web builds at all
 
-- `cloudflare_credentials.json`
+## Current Workflow
 
-实际凭证文件已加入 `.gitignore`，不会被 git 追踪。
-
-## 用法
-
-```bash
-python3 RPGMZ_pipline.py <游戏名>
-```
-
-示例：
+The current entrypoint is still a single script:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg
+python3 RPGMZ_pipline.py <project-name> --single-deploy
 ```
 
-单次部署模式：
+Typical usage:
 
 ```bash
 python3 RPGMZ_pipline.py fgo-rpg --single-deploy
 ```
 
-## 部署行为
+The script expects a full RPG Maker MV/MZ game directory under the repo root with at least:
 
-- 默认部署到 Cloudflare Pages 的 `production` 分支
-- 不加 `--single-deploy` 时，脚本会先部署一次，然后等待你去 Cloudflare 后台绑定 `AUTH_CODES` KV，再执行第二次部署
-- 加 `--single-deploy` 时，只做一次部署，不等待人工确认
+- `index.html`
+- `js/`
+- `data/`
 
-## 实际处理流程
+### Required Files
 
-1. 从完整游戏目录复制出 `www/`
-2. 删除 PC 壳文件和无关目录
-3. 合并 `patch.zip`
-4. 注入 `CN.json`
-5. 修改 `index.html` 和引擎 JS
-6. 关闭 `System.json` 加密标志并解密资源
-7. 把音频转成 `m4a`
-8. 将非 ASCII 音频文件名改成 ASCII，并重写所有引用
-9. 执行构建后音频一致性校验
-10. 转码视频
-11. 修复插件参数与资源引用
-12. 注入 `_worker.js`
-13. 部署到 Cloudflare Pages
+- `RPGMZ_pipline.py`
+- `_worker.js`
+- `vpad.html`
+- `cloudflare_credentials.json`
 
-## 注意事项
+### Optional Files
 
-- 当前目录里如果同时存在多个完整游戏目录，脚本的自动识别会变得不可靠，最好一次只放一个
-- 每次执行都会优先从原始完整游戏目录重建 `www/`
-- 音频转码可能耗时较长
-- iOS 端现在默认请求 `m4a`，所以构建产物里必须同时存在 `ogg` 和 `m4a`
-- 执行后会生成 `www/audio_rename_map.json`，用于记录音频 ASCII 化映射
-- 如果在受限环境里运行，`wrangler` 可能会因为网络或配置目录权限失败
-- 如果要清理空间，部署完成后可以删除 `www/` 和原始游戏目录
+- `patch.zip`
+- `CN.json`
 
-## 调试方法
+## Cloudflare Credentials
 
-- 在 iPhone/iPad 上追加 `?audioDebug=1` 访问部署地址，可以打开音频调试面板
-- 调试面板会记录 `playBgm/playBgs`、实际请求 URL、`decode/error`、音频后缀判定和解码器判定
-- 不带 `?audioDebug=1` 时，调试标记会自动清理，不会常驻
+Real credentials are read from:
 
-## 推荐工作流
+- `cloudflare_credentials.json`
 
-1. 把一个完整 RPG Maker 游戏目录放到仓库根目录
-2. 准备好 `_worker.js`、`vpad.html`
-3. 如有需要，加入 `patch.zip` 或 `CN.json`
-4. 运行：
+Template:
 
-```bash
-python3 RPGMZ_pipline.py <项目名> --single-deploy
+- `cloudflare_credentials.json.example`
+
+The real credential file is ignored by git.
+
+Example:
+
+```json
+{
+  "account_id": "your_cloudflare_account_id",
+  "api_token": "your_cloudflare_api_token",
+  "kv_namespace_id": "optional_kv_namespace_id"
+}
 ```
 
-5. 部署完成后，按需删除 `www/` 和源游戏目录
+## iPhone / iPad Debugging
+
+To debug web audio on iPhone/iPad:
+
+```text
+?audioDebug=1
+```
+
+This enables an on-screen audio debug panel inside the game page. It logs:
+
+- `playBgm` / `playBgs`
+- actual audio URLs being loaded
+- `decode` / `error`
+- chosen audio extension
+- decoder path selection
+- visibility and page lifecycle events
+
+This exists because remote debugging Safari audio failures is much slower than just reading the log on device.
+
+## Current Output Guarantees
+
+Before deployment, the pipeline now checks:
+
+- encrypted audio leftovers are gone
+- decrypted `.ogg` files exist
+- `.m4a` pairs exist where expected
+- renamed audio references are consistent
+
+If those checks fail, deployment stops.
+
+## Repository Direction
+
+This branch is the beginning of a larger cleanup.
+
+The project is moving from:
+
+- a monolithic personal deployment script
+
+toward:
+
+- a modular RPG Maker web porting toolkit
+
+### Stage 1 Refactor Goal
+
+Keep behavior stable while splitting responsibilities into modules:
+
+- runtime config
+- workspace preparation
+- deployment
+- resource processing
+- audio handling
+- validation
+
+The goal of this phase is not “rewrite everything”. The goal is:
+
+- reduce accidental regressions
+- make fixes auditable
+- make the tool usable by someone other than the original author
+
+## Roadmap
+
+Planned high-value improvements:
+
+- split resource processing and audio handling into dedicated modules
+- add sample-build regression tests
+- generate structured build reports
+- make debug injection easier to toggle by environment
+- improve support matrix documentation for MV vs MZ and iOS vs non-iOS
+- add a cleaner public-facing CLI interface
+
+## Limitations
+
+Current limitations are intentional and should be explicit:
+
+- this toolkit is still opinionated toward Cloudflare Pages deployment
+- the codebase is mid-refactor, not a finished framework
+- it still uses targeted runtime patch injection for some compatibility fixes
+- not every RPG Maker plugin stack will behave identically on the web
+
+## Why This Could Be a Good Open Source Project
+
+The pitch is not “look at my deployment script”.
+
+The pitch is:
+
+> A practical toolkit for shipping RPG Maker MV/MZ games to the web, with real iPhone/iPad audio fixes and deployment hardening built in.
+
+That is a much better open source story, because it is:
+
+- narrow enough to be useful
+- painful enough that people search for it
+- specific enough to demonstrate value fast
+
+## Status
+
+This branch is the refactor track:
+
+- branch: `refactor/stage1-pipeline`
+- goal: turn the current pipeline into a maintainable toolkit without breaking working behavior
+
+If you are evaluating this repository as an open source product, this is the right framing:
+
+- not a generic engine tool
+- not a game framework
+- a deployment and compatibility toolkit for RPG Maker web shipping

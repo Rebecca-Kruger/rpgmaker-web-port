@@ -7,100 +7,25 @@ import sys
 import re
 import shutil
 import glob
+from pipeline.config import load_cloudflare_credentials, load_runtime_config
+from pipeline.deploy import deploy_to_cloudflare
+from pipeline.workspace import get_valid_project_name, prepare_www_workspace
 
 # ==========================================
 # 1. 基础环境配置
 # ==========================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WWW_DIR = os.path.join(BASE_DIR, "www")
-PATCH_ZIP = os.path.join(BASE_DIR, "patch.zip")
-SYSTEM_JSON_PATH = os.path.join(WWW_DIR, "data", "System.json")
-CLOUDFLARE_CREDENTIALS_PATH = os.path.join(BASE_DIR, "cloudflare_credentials.json")
-# [新增] 虚拟手柄文件的路径
-VPAD_HTML_PATH = os.path.join(BASE_DIR, "vpad.html") 
-
-# ==========================================
-# 2. 动态 CI/CD 部署配置
-# ==========================================
-if len(sys.argv) < 2:
-    print("❌ 错误：缺少游戏文件夹名称！")
-    print("💡 用法: sudo python3 pipeline.py <游戏名> [--single-deploy]")
-    sys.exit(1)
-
-GAME_NAME = sys.argv[1]
-SINGLE_DEPLOY = "--single-deploy" in sys.argv[2:]
-SAVE_PREFIX = GAME_NAME.upper() + "_"
-DEPLOY_DIR = os.path.join("/var/www/html/games", GAME_NAME)
-LOBBY_HTML_PATH = "/var/www/html/index.html"
+RUNTIME = load_runtime_config()
+BASE_DIR = RUNTIME.base_dir
+WWW_DIR = RUNTIME.www_dir
+PATCH_ZIP = RUNTIME.patch_zip
+SYSTEM_JSON_PATH = RUNTIME.system_json_path
+VPAD_HTML_PATH = RUNTIME.vpad_html_path
+GAME_NAME = RUNTIME.game_name
+SINGLE_DEPLOY = RUNTIME.single_deploy
 
 # ==========================================
 # 核心流水线函数
 # ==========================================
-
-def load_cloudflare_credentials():
-    """从独立配置文件加载 Cloudflare 凭证。"""
-    if not os.path.exists(CLOUDFLARE_CREDENTIALS_PATH):
-        print(f"  [!] 缺少 Cloudflare 凭证文件: {CLOUDFLARE_CREDENTIALS_PATH}")
-        print("  [!] 请参考 cloudflare_credentials.json.example 创建实际配置文件。")
-        sys.exit(1)
-
-    try:
-        with open(CLOUDFLARE_CREDENTIALS_PATH, "r", encoding="utf-8") as f:
-            credentials = json.load(f)
-    except Exception as e:
-        print(f"  [!] Cloudflare 凭证文件解析失败: {e}")
-        sys.exit(1)
-
-    required_fields = ["account_id", "api_token"]
-    missing_fields = [field for field in required_fields if not credentials.get(field)]
-    if missing_fields:
-        print(f"  [!] Cloudflare 凭证缺少必要字段: {', '.join(missing_fields)}")
-        sys.exit(1)
-
-    return credentials
-
-def detect_game_source_dir():
-    """检测完整 PC 游戏目录，并作为 www 工作区来源。"""
-    candidates = []
-    non_www_candidates = []
-    for entry in os.listdir(BASE_DIR):
-        path = os.path.join(BASE_DIR, entry)
-        if not os.path.isdir(path):
-            continue
-        if entry in [".git", ".wrangler", "__pycache__", "www"]:
-            continue
-        if os.path.exists(os.path.join(path, "index.html")) and \
-           os.path.isdir(os.path.join(path, "js")) and \
-           os.path.isdir(os.path.join(path, "data")):
-            candidates.append(path)
-            if os.path.abspath(path) != os.path.abspath(WWW_DIR):
-                non_www_candidates.append(path)
-
-    if len(non_www_candidates) == 1:
-        return non_www_candidates[0]
-    if len(candidates) == 1:
-        return candidates[0]
-    if os.path.exists(WWW_DIR):
-        return WWW_DIR
-    return None
-
-def prepare_www_workspace():
-    """将完整 PC 目录复制成标准 www 工作目录。"""
-    source_dir = detect_game_source_dir()
-    if not source_dir:
-        print("  [!] 未找到可用的游戏源目录。请提供 www 或完整 PC 游戏目录。")
-        sys.exit(1)
-
-    if os.path.abspath(source_dir) == os.path.abspath(WWW_DIR):
-        print(f"  [+] 使用现有 www 工作目录: {WWW_DIR}")
-        return
-
-    print(f"\n>>> 预处理: 从源目录构建 www 工作区...")
-    print(f"  [+] 源目录: {source_dir}")
-    if os.path.exists(WWW_DIR):
-        shutil.rmtree(WWW_DIR)
-    shutil.copytree(source_dir, WWW_DIR)
-    print(f"  [+] 已复制到工作目录: {WWW_DIR}")
 
 def patch_problematic_plugin_params():
     """只修复当前已定位的高风险插件参数，不做全量重写。"""
@@ -1315,91 +1240,12 @@ def fix_resource_percent_symbols(target_dir):
                             f.write(content)
     print("  [+] 资源符号修复完成！")
 
-def get_valid_project_name():
-    """获取并修正为 Cloudflare 规范域名"""
-    raw_name = GAME_NAME
-    name = raw_name.lower()
-    name = re.sub(r'[\s_]+', '-', name)
-    name = re.sub(r'[^a-z0-9-]', '', name)
-    name = name.strip('-')[:58].rstrip('-')
-    
-    if not name:
-        print(f"❌ 错误：项目名 '{raw_name}' 无法转换！")
-        sys.exit(1)
-    return name      
-
-def step11_deploy_to_cloudflare(project_name):
-    """推送到 Cloudflare 并注入防伪网关"""
-    mode_text = "一次性部署" if SINGLE_DEPLOY else "部署 (含手动 KV 绑定确认)"
-    print(f"\n🚀 [Step 11] 开始执行{mode_text}: {project_name} ...")
-    cf_credentials = load_cloudflare_credentials()
-    
-    # [核心修复] 恢复防伪网关代码 (_worker.js) 的拷贝逻辑
-    worker_src = os.path.join(BASE_DIR, "_worker.js")
-    worker_dest = os.path.join(WWW_DIR, "_worker.js")
-
-    try:
-        shutil.copy2(worker_src, worker_dest)
-        print("   _worker.js 注入完成。")
-    except FileNotFoundError:
-        print(f"   致命错误：找不到防伪网关文件 {worker_src}！流水线终止。")
-        sys.exit(1)
-
-    # 注入部署凭证环境变量
-    env = os.environ.copy()
-    env["CLOUDFLARE_ACCOUNT_ID"] = cf_credentials["account_id"]
-    env["CLOUDFLARE_API_TOKEN"] = cf_credentials["api_token"]
-
-    deploy_cmd = [
-        "wrangler", "pages", "deploy", 
-        WWW_DIR, 
-        "--project-name", project_name,
-        "--branch", "production",
-    ]
-
-    print("\n   ⏳ [阶段一] 正在推送到 Cloudflare...")
-    print("   " + "-"*40)
-    
-    try:
-        subprocess.run(deploy_cmd, env=env, check=True)
-    except subprocess.CalledProcessError:
-        print("\n   首次部署失败或被取消，请检查报错。")
-        return
-
-    if SINGLE_DEPLOY:
-        print("   " + "-"*40)
-        print(f"\n  单次部署完成！")
-        return
-
-    print("\n" + "!"*55)
-    print(" ⚠️ 关键操作：守卫需要数据库钥匙 ⚠️")
-    print(f" 项目 '{project_name}' 已初步上线，但尚未连接 KV 数据库！")
-    print(" 请立即前往 Cloudflare 网页端完成以下操作：")
-    print(" 1. 进入 Workers & Pages -> 点击刚部署的项目")
-    print(" 2. 点击顶部 Settings (设置) -> 左侧 Functions (函数)")
-    print(" 3. 下拉找到 KV namespace bindings，点击 Add binding")
-    print(" 4. Variable name 填入大写: AUTH_CODES")
-    print(" 5. KV namespace 选择你的防伪数据库")
-    print(" 6. 点击 Save (保存)")
-    print("!"*55)
-    
-    input("\n  完成网页端绑定后，请在这里按下【回车键】进行最终部署刷新...")
-
-    print("\n   [阶段三] 正在重新部署，使 KV 绑定正式生效...")
-    print("   " + "-"*40)
-    try:
-        subprocess.run(deploy_cmd, env=env, check=True)
-        print("   " + "-"*40)
-        print(f"\n  恭喜！大门已锁死，部署大功告成！")
-    except subprocess.CalledProcessError:
-        print("\n   二次部署失败。")
-
 def main():
     print("="*50)
     print(" RPG Maker Web 全自动部署处理流 (MV/MZ 兼容版)")
     print("="*50)
     
-    prepare_www_workspace()
+    prepare_www_workspace(BASE_DIR, WWW_DIR)
     step0_clean_pc_build()
     step0_apply_mtools_translation()
     step1_apply_patch()
@@ -1413,8 +1259,9 @@ def main():
     patch_problematic_plugin_params()
     fix_resource_percent_symbols(WWW_DIR)
     
-    FINAL_PROJECT_NAME = get_valid_project_name()
-    step11_deploy_to_cloudflare(FINAL_PROJECT_NAME)
+    final_project_name = get_valid_project_name(GAME_NAME)
+    credentials = load_cloudflare_credentials(RUNTIME.cloudflare_credentials_path)
+    deploy_to_cloudflare(final_project_name, RUNTIME, credentials)
     
     print("\n" + "="*50)
     
