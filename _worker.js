@@ -121,6 +121,19 @@ const loginHTML = `
     </div>
 
     <script>
+        (function initDebugFlag() {
+            try {
+                const search = new URLSearchParams(window.location.search);
+                if (search.get('audioDebug') === '1') {
+                    sessionStorage.setItem('AUDIO_DEBUG', '1');
+                    localStorage.removeItem('AUDIO_DEBUG');
+                } else {
+                    sessionStorage.removeItem('AUDIO_DEBUG');
+                    localStorage.removeItem('AUDIO_DEBUG');
+                }
+            } catch (err) {}
+        })();
+
         async function verifyCode() {
             const hash = document.getElementById('hash-input').value.trim();
             const errorMsg = document.getElementById('error-msg');
@@ -144,7 +157,7 @@ const loginHTML = `
                     btn.innerText = '接入成功！正在装载游戏...';
                     btn.style.background = '#30d158';
                     errorMsg.style.display = 'none';
-                    setTimeout(() => window.location.reload(), 800);
+                    setTimeout(() => window.location.href = window.location.pathname + window.location.search + window.location.hash, 800);
                 } else {
                     btn.innerText = '验证并接入';
                     btn.disabled = false;
