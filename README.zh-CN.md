@@ -2,9 +2,9 @@
 
 英文文档：[README.md](README.md)
 
-把 RPG Maker MV/MZ 的 Windows 导出包转换成更适合移动端网页运行的构建产物，并支持部署到 Cloudflare Pages、本地目录或自定义服务器。
+把 RPG Maker MV/MZ 的 PC 游戏包转换成更适合移动端网页运行的构建产物，并支持部署到 Cloudflare Pages、本地目录或自定义服务器。
 
-这个项目不是通用游戏引擎，也不是插件框架。它专注解决 RPG Maker 游戏 Web 化时最麻烦的一段：iPhone/iPad 音频、加密资源、非 ASCII 文件名、NW.js 桌面残留、插件兼容和部署产物校验。
+这是一个面向 RPG Maker MV/MZ 的 PC 游戏包 Web 化流水线/工具链，重点处理桌面导出包在浏览器或 WebView 中稳定运行前需要完成的转换、修复和兼容步骤。
 
 ## 主要能力
 
@@ -103,8 +103,6 @@ Cloudflare Pages 需要配置：
 python3 rpgmaker_web_port.py demo-game --source ./Game --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
 ```
 
-## 发布注意事项
+## 许可证
 
-不要提交商业游戏资源、私有游戏包、真实 Cloudflare 凭证、访问码数据库或生成后的 `www/` / `dist/` 构建产物。
-
-请只处理你有权处理和分发的游戏与素材。本工具是技术兼容层，不授予任何第三方游戏内容的分发权。
+本项目使用 GNU General Public License v3.0。详见 [LICENSE](LICENSE)。

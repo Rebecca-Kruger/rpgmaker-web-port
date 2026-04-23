@@ -2,7 +2,7 @@
 
 Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
 
-Turn an RPG Maker MV/MZ Windows build into a mobile-friendly web build that can be deployed to Cloudflare Pages, a local directory, or a custom server.
+Turn an RPG Maker MV/MZ PC package into a mobile-friendly web build that can be deployed to Cloudflare Pages, a local directory, or a custom server.
 
 This project exists for a very specific pain:
 
@@ -11,7 +11,7 @@ This project exists for a very specific pain:
 - encrypted assets, non-ASCII filenames, NW.js leftovers, and plugin edge cases turn into deployment bugs
 - most guides stop at “it boots in browser”, not “it actually works on mobile Safari”
 
-This toolkit is opinionated. It is not trying to be a generic game engine framework. It is trying to solve the ugly last-mile problems of shipping real RPG Maker games to the web.
+This is a PC-package-to-web pipeline for RPG Maker MV/MZ projects. It focuses on the practical conversion and compatibility steps needed before a desktop export can run reliably in a browser or WebView.
 
 ## Why This Project Exists
 
@@ -68,9 +68,9 @@ This project is a good fit if you are:
 - deploying to Cloudflare Pages
 - tired of manually patching `index.html`, audio files, and runtime JS every time
 
-This project is probably not for you if:
+This project is probably not the right fit if:
 
-- you want a generic RPG Maker plugin framework
+- you want to create or manage RPG Maker plugins
 - you need a polished GUI app instead of a build pipeline
 - you are not deploying web builds at all
 
@@ -179,12 +179,6 @@ For `--deploy-target custom`, the command receives these environment variables:
 
 This is intended for custom servers, Docker images, rsync/scp publishing, or later packaging the generated web runtime into a native wrapper.
 
-## Publishing Notes
-
-Do not commit commercial game assets, private game builds, real Cloudflare credentials, access-code databases, or generated build outputs. This repository should contain the toolkit only.
-
-Use this project only with games and assets you are allowed to process. The toolkit is a technical compatibility layer; it does not grant rights to distribute third-party game content.
-
 ## iPhone / iPad Debugging
 
 To debug web audio on iPhone/iPad:
@@ -260,7 +254,7 @@ Planned high-value improvements:
 Current limitations are intentional and should be explicit:
 
 - Cloudflare Pages is still the most complete deployment backend, but local and custom targets are now supported
-- the codebase is mid-refactor, not a finished framework
+- the codebase is mid-refactor, not a polished end-user application
 - it still uses targeted runtime patch injection for some compatibility fixes
 - not every RPG Maker plugin stack will behave identically on the web
 
@@ -287,6 +281,10 @@ This branch is the refactor track:
 
 If you are evaluating this repository as an open source product, this is the right framing:
 
-- not a generic engine tool
-- not a game framework
+- a PC package to web build pipeline for RPG Maker MV/MZ
 - a deployment and compatibility toolkit for RPG Maker web shipping
+- a foundation for future desktop, server, or app-based importers
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
