@@ -1,5 +1,7 @@
 *
 !.gitignore
+!README.md
+!REQUIREMENTS.md
 !RPGMZ_pipline.py
 !_worker.js
 !vpad.html
