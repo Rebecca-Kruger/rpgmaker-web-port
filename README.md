@@ -77,13 +77,25 @@ This project is probably not for you if:
 The current entrypoint is still a single script:
 
 ```bash
-python3 RPGMZ_pipline.py <project-name> --single-deploy
+python3 RPGMZ_pipline.py <project-name>
 ```
 
 Typical usage:
 
 ```bash
-python3 RPGMZ_pipline.py fgo-rpg --single-deploy
+python3 RPGMZ_pipline.py fgo-rpg
+```
+
+Enable Cloudflare KV access verification only when you need a gated demo:
+
+```bash
+python3 RPGMZ_pipline.py fgo-rpg --enable-kv-auth
+```
+
+Use `--single-deploy` together with `--enable-kv-auth` only when the Cloudflare Pages project already has the `AUTH_CODES` KV binding configured:
+
+```bash
+python3 RPGMZ_pipline.py fgo-rpg --enable-kv-auth --single-deploy
 ```
 
 The script expects a full RPG Maker MV/MZ game directory under the repo root with at least:
@@ -95,7 +107,6 @@ The script expects a full RPG Maker MV/MZ game directory under the repo root wit
 ### Required Files
 
 - `RPGMZ_pipline.py`
-- `_worker.js`
 - `vpad.html`
 - `cloudflare_credentials.json`
 
@@ -103,6 +114,7 @@ The script expects a full RPG Maker MV/MZ game directory under the repo root wit
 
 - `patch.zip`
 - `CN.json`
+- `_worker.js` if `--enable-kv-auth` is used
 
 ## Cloudflare Credentials
 
@@ -125,6 +137,14 @@ Example:
   "kv_namespace_id": "optional_kv_namespace_id"
 }
 ```
+
+## Optional KV Access Verification
+
+By default, the pipeline deploys a normal static Cloudflare Pages build.
+
+If `--enable-kv-auth` is provided, the pipeline copies `_worker.js` into `www/` and enables a Cloudflare Pages Worker gate backed by a KV namespace binding named `AUTH_CODES`.
+
+The verification page describes the build as a technical exploration simulator. It should not present itself as an official or licensed product.
 
 ## iPhone / iPad Debugging
 

@@ -14,6 +14,7 @@ class RuntimeConfig:
     vpad_html_path: str
     game_name: str
     single_deploy: bool
+    enable_kv_auth: bool
     save_prefix: str
     deploy_dir: str
     lobby_html_path: str
@@ -30,12 +31,13 @@ def load_runtime_config(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
         print("❌ 错误：缺少游戏文件夹名称！")
-        print("💡 用法: sudo python3 pipeline.py <游戏名> [--single-deploy]")
+        print("💡 用法: python3 RPGMZ_pipline.py <项目名> [--enable-kv-auth] [--single-deploy]")
         sys.exit(1)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     game_name = argv[0]
     single_deploy = "--single-deploy" in argv[1:]
+    enable_kv_auth = "--enable-kv-auth" in argv[1:]
     www_dir = os.path.join(base_dir, "www")
     return RuntimeConfig(
         base_dir=base_dir,
@@ -46,6 +48,7 @@ def load_runtime_config(argv=None):
         vpad_html_path=os.path.join(base_dir, "vpad.html"),
         game_name=game_name,
         single_deploy=single_deploy,
+        enable_kv_auth=enable_kv_auth,
         save_prefix=game_name.upper() + "_",
         deploy_dir=os.path.join("/var/www/html/games", game_name),
         lobby_html_path="/var/www/html/index.html",

@@ -195,8 +195,24 @@ ffmpeg -codecs | rg aac
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
-python3 RPGMZ_pipline.py <项目名> --single-deploy
+python3 RPGMZ_pipline.py <项目名>
 ```
+
+默认是普通静态部署，不启用 KV 访问验证。
+
+如果需要访问码验证页，使用：
+
+```bash
+python3 RPGMZ_pipline.py <项目名> --enable-kv-auth
+```
+
+如果 Cloudflare Pages 项目已经提前绑定好 `AUTH_CODES`，可以使用：
+
+```bash
+python3 RPGMZ_pipline.py <项目名> --enable-kv-auth --single-deploy
+```
+
+访问验证页只应表述为技术探索模拟器，不应使用商业发行或类似表述。
 
 默认部署分支是：
 
