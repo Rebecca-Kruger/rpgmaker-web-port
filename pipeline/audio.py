@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -82,8 +83,8 @@ def convert_audio_to_m4a(www_dir):
 
 
 def sanitize_audio_filenames(www_dir):
-    """Normalize non-ASCII audio filenames to ASCII and rewrite data references."""
-    print("\n>>> Step 5.3: Normalizing audio filenames to ASCII and rewriting references...")
+    """Normalize unsafe audio filenames to safe ASCII names and rewrite references."""
+    print("\n>>> Step 5.3: Normalizing unsafe audio filenames and rewriting references...")
     audio_dir = os.path.join(www_dir, "audio")
     data_dir = os.path.join(www_dir, "data")
     plugins_js_path = os.path.join(www_dir, "js", "plugins.js")
@@ -91,8 +92,10 @@ def sanitize_audio_filenames(www_dir):
         print("  [-] audio directory not found. Skipping audio filename normalization.")
         return
 
-    def is_ascii(text):
-        return all(ord(ch) < 128 for ch in text)
+    safe_basename_pattern = re.compile(r"^[A-Za-z0-9_-]+$")
+
+    def is_safe_audio_basename(text):
+        return bool(safe_basename_pattern.fullmatch(text))
 
     def replace_audio_refs(node, mapping_by_folder):
         if isinstance(node, list):
@@ -179,7 +182,7 @@ def sanitize_audio_filenames(www_dir):
 
         counter = 1
         for base in sorted(grouped_files.keys()):
-            if is_ascii(base):
+            if is_safe_audio_basename(base):
                 continue
 
             while True:
@@ -196,7 +199,7 @@ def sanitize_audio_filenames(www_dir):
             total_renamed += 1
 
     if total_renamed == 0:
-        print("  [-] No non-ASCII audio filenames found.")
+        print("  [-] No unsafe audio filenames found.")
         return
 
     if os.path.exists(data_dir):
@@ -223,7 +226,7 @@ def sanitize_audio_filenames(www_dir):
     with open(rename_map_path, "w", encoding="utf-8") as file:
         json.dump(mapping_by_folder, file, ensure_ascii=False, indent=2)
 
-    print(f"  [+] Normalized {total_renamed} audio basenames and rewrote data references.")
+    print(f"  [+] Normalized {total_renamed} unsafe audio basenames and rewrote data references.")
 
 
 def validate_audio_consistency(www_dir, system_json_path):
@@ -246,6 +249,60 @@ def validate_audio_consistency(www_dir, system_json_path):
     decrypted_ogg_files = []
     m4a_files = set()
     missing_m4a = []
+    missing_referenced_audio = []
+
+    def collect_audio_refs(node, refs, source_name):
+        if isinstance(node, list):
+            for item in node:
+                collect_audio_refs(item, refs, source_name)
+            return
+        if not isinstance(node, dict):
+            return
+
+        def add_ref(folder, name):
+            if isinstance(name, str) and name:
+                refs.add((folder, name, source_name))
+
+        if isinstance(node.get("bgm"), dict):
+            add_ref("bgm", node["bgm"].get("name"))
+
+        if isinstance(node.get("bgs"), dict):
+            add_ref("bgs", node["bgs"].get("name"))
+
+        if "sounds" in node and isinstance(node["sounds"], list):
+            for sound in node["sounds"]:
+                if isinstance(sound, dict):
+                    add_ref("se", sound.get("name"))
+
+        if isinstance(node.get("battleBgm"), dict):
+            add_ref("bgm", node["battleBgm"].get("name"))
+
+        if isinstance(node.get("titleBgm"), dict):
+            add_ref("bgm", node["titleBgm"].get("name"))
+
+        for key in ("boat", "ship", "airship"):
+            if isinstance(node.get(key), dict) and isinstance(node[key].get("bgm"), dict):
+                add_ref("bgm", node[key]["bgm"].get("name"))
+
+        for key in ("victoryMe", "defeatMe", "gameoverMe"):
+            if isinstance(node.get(key), dict):
+                add_ref("me", node[key].get("name"))
+
+        code = node.get("code")
+        params = node.get("parameters")
+        if isinstance(code, int) and isinstance(params, list) and params and isinstance(params[0], dict):
+            audio = params[0]
+            if code in (241, 132):
+                add_ref("bgm", audio.get("name"))
+            elif code == 245:
+                add_ref("bgs", audio.get("name"))
+            elif code == 249:
+                add_ref("me", audio.get("name"))
+            elif code == 250:
+                add_ref("se", audio.get("name"))
+
+        for value in node.values():
+            collect_audio_refs(value, refs, source_name)
 
     for root, _, files in os.walk(audio_dir):
         for filename in files:
@@ -288,6 +345,36 @@ def validate_audio_consistency(www_dir, system_json_path):
             print(f"      - {rel_path}")
         if len(missing_m4a) > 20:
             print(f"      ... plus {len(missing_m4a) - 20} more files not shown")
+        sys.exit(1)
+
+    data_dir = os.path.join(www_dir, "data")
+    if os.path.exists(data_dir):
+        referenced_audio = set()
+        for filename in os.listdir(data_dir):
+            if not filename.endswith(".json"):
+                continue
+            file_path = os.path.join(data_dir, filename)
+            with open(file_path, "r", encoding="utf-8-sig") as file:
+                data = json.load(file)
+            collect_audio_refs(data, referenced_audio, filename)
+
+        for folder, name, source_name in sorted(referenced_audio):
+            ogg_path = os.path.join(audio_dir, folder, name + ".ogg")
+            m4a_path = os.path.join(audio_dir, folder, name + ".m4a")
+            if not os.path.exists(ogg_path) or not os.path.exists(m4a_path):
+                missing_parts = []
+                if not os.path.exists(ogg_path):
+                    missing_parts.append(os.path.relpath(ogg_path, www_dir))
+                if not os.path.exists(m4a_path):
+                    missing_parts.append(os.path.relpath(m4a_path, www_dir))
+                missing_referenced_audio.append((source_name, folder, name, missing_parts))
+
+    if missing_referenced_audio:
+        print(f"  [!] Found {len(missing_referenced_audio)} audio references without matching files. Build output is invalid.")
+        for source_name, folder, name, missing_parts in missing_referenced_audio[:20]:
+            print(f"      - {source_name}: {folder}/{name} missing {', '.join(missing_parts)}")
+        if len(missing_referenced_audio) > 20:
+            print(f"      ... plus {len(missing_referenced_audio) - 20} more references not shown")
         sys.exit(1)
 
     print(f"  [+] Audio consistency validation passed: {len(decrypted_ogg_files)} .ogg files, {len(m4a_files)} .m4a files, no encrypted audio remains.")
