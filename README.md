@@ -13,6 +13,12 @@ This project exists for a very specific pain:
 
 This is a PC-package-to-web pipeline for RPG Maker MV/MZ projects. It focuses on the practical conversion and compatibility steps needed before a desktop export can run reliably in a browser or WebView.
 
+## Project Origin
+
+This project is not fully AI-generated.
+
+Parts of the Python implementation were written manually, then iteratively studied and refined through Gemini-assisted research, and finally organized and published with Codex.
+
 ## Feedback and Bug Reports
 
 If you deploy any RPG Maker MV/MZ game with this toolkit and hit a bug, please open an Issue.
