@@ -1,15 +1,26 @@
+# Keep this repository as an explicit allowlist.
+# Everything is ignored unless explicitly unignored below.
 *
+
+# Core project files
 !.gitignore
+!LICENSE
 !README.md
 !README.zh-CN.md
 !REQUIREMENTS.md
-!LICENSE
+!REQUIREMENTS.zh-CN.md
 !SECURITY.md
 !RPGMZ_pipline.py
 !rpgmaker_web_port.py
 !_worker.js
 !vpad.html
+
+# Pipeline modules
 !pipeline/
 !pipeline/*.py
-cloudflare_credentials.json
+
+# Public template (tracked)
 !cloudflare_credentials.json.example
+
+# Real local credentials (never track)
+cloudflare_credentials.json

@@ -1,26 +1,26 @@
 # Environment Requirements
 
-这份文档说明 `rpgmaker_web_port.py` 运行前需要准备什么，以及推荐的环境配置方式。
+This document describes the runtime and tooling requirements for `rpgmaker_web_port.py`, plus recommended setup for stable builds and deployments.
 
-## 当前已验证版本
+## Verified Versions
 
 - Python: `3.10.12`
 - FFmpeg: `4.4.2`
 - Wrangler: `4.70.0`
 
-## 必需软件
+## Required Software
 
 ### 1. Python 3
 
-脚本本体使用标准库，不依赖额外 `pip` 包。
+The pipeline itself uses Python standard library modules and does not require extra `pip` packages.
 
-检查：
+Check:
 
 ```bash
 python3 --version
 ```
 
-Ubuntu 安装：
+Ubuntu install:
 
 ```bash
 sudo apt update
@@ -29,77 +29,72 @@ sudo apt install -y python3
 
 ### 2. FFmpeg
 
-用于把音频转成 `m4a`，以及把 `webm` 转成 `mp4`。
+Used for audio conversion (`ogg/wav -> m4a`) and video conversion (`webm -> mp4`).
 
-当前流水线里，iPhone/iPad 会优先请求 `m4a`，所以 `ffmpeg` 不是可选项，而是构建可播放 iOS 音频的必要组件。
+In this pipeline, iPhone/iPad targets request `m4a`, so `ffmpeg` is required for iOS-compatible audio output.
 
-检查：
+Check:
 
 ```bash
 ffmpeg -version
 ```
 
-Ubuntu 安装：
+Ubuntu install:
 
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
 ```
 
-### 3. Node.js 和 Wrangler
+### 3. Node.js and Wrangler
 
-用于部署到 Cloudflare Pages。
+Required for Cloudflare Pages deployment.
 
-先检查 Node：
+Check Node:
 
 ```bash
 node --version
 npm --version
 ```
 
-如果没装，Ubuntu 安装：
+Ubuntu install:
 
 ```bash
 sudo apt update
 sudo apt install -y nodejs npm
 ```
 
-安装 Wrangler：
+Install Wrangler:
 
 ```bash
 sudo npm install -g wrangler
 ```
 
-检查：
+Check:
 
 ```bash
 wrangler --version
 ```
 
-## Cloudflare 配置
+## Cloudflare Credentials
 
-只有使用 `--deploy-target cloudflare` 时才需要 Cloudflare 凭证。凭证放在仓库根目录下的 `cloudflare_credentials.json`：
+Cloudflare credentials are only required when using `--deploy-target cloudflare`.
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
-
-模板文件是：
+Template file:
 
 - `cloudflare_credentials.json.example`
 
-建议做法：
+Recommended setup:
 
-1. 复制模板文件
-2. 新建实际凭证文件 `cloudflare_credentials.json`
-3. 填入真实的 `account_id` 和 `api_token`
-
-示例：
+1. Copy the template.
+2. Create `cloudflare_credentials.json`.
+3. Fill in real `account_id` and `api_token` values.
 
 ```bash
 cp cloudflare_credentials.json.example cloudflare_credentials.json
 ```
 
-文件内容示例：
+Example:
 
 ```json
 {
@@ -109,69 +104,67 @@ cp cloudflare_credentials.json.example cloudflare_credentials.json
 }
 ```
 
-实际凭证文件已被 `.gitignore` 忽略，不会被 git 追踪。
+`cloudflare_credentials.json` is intentionally ignored by git.
 
-## Wrangler 目录权限
+## Wrangler Config Directory Permission
 
-`wrangler` 默认会写：
+Wrangler writes under:
 
 - `~/.config/.wrangler`
 
-如果运行环境对这个目录只读，部署时会报日志写入错误。这个时候需要把 `XDG_CONFIG_HOME` 指到一个可写目录。
+If your runtime environment makes that path read-only, deployment can fail during log/config writes. Point `XDG_CONFIG_HOME` to a writable directory.
 
-推荐：
+Recommended:
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
 mkdir -p "$XDG_CONFIG_HOME"
 ```
 
-然后再执行部署命令。
-
-单独测试部署时可以这样写：
+Test deploy command:
 
 ```bash
 env XDG_CONFIG_HOME="$HOME/.codex/memories/.config" wrangler pages deploy www --project-name demo-game --branch production
 ```
 
-## 目录内必需文件
+## Required Repository Files
 
-脚本所在目录建议至少包含：
+At minimum, keep these files in the project root:
 
 - `rpgmaker_web_port.py`
 - `_worker.js`
 - `vpad.html`
 
-可选文件：
+Optional inputs:
 
 - `patch.zip`
 - `CN.json`
 
-输入素材：
+Input game requirements:
 
-- 一个完整的 RPG Maker MV/MZ 游戏目录
-- 该目录内至少要有 `index.html`、`js/`、`data/`
+- A complete RPG Maker MV/MZ game directory
+- The game directory must contain at least `index.html`, `js/`, and `data/`
 
-构建产物补充说明：
+Build output notes:
 
-- 运行后会生成 `www/`
-- 流水线会在 `www/audio_rename_map.json` 输出非 ASCII 音频文件名的重命名映射
-- 如果音频解密、转码、ASCII 化或一致性校验失败，脚本会直接终止，不继续部署
+- The pipeline creates `www/`
+- The pipeline writes filename mapping to `www/audio_rename_map.json`
+- Build stops immediately if audio decryption/transcoding/normalization/validation fails
 
-## 推荐环境变量
+## Recommended Environment Variables
 
-如果你希望长期稳定运行，建议在 shell 配置里加入：
+For stable long-term operation:
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
 export PATH="$PATH:/usr/bin:/usr/local/bin"
 ```
 
-当前版本不需要再额外导出 Cloudflare 账号环境变量；脚本会按需读取 `cloudflare_credentials.json`。
+Cloudflare account environment variables are not required by default; the pipeline reads `cloudflare_credentials.json` when needed.
 
-## 最小自检
+## Minimal Preflight Check
 
-在运行流水线前，先过一遍：
+Before running the pipeline:
 
 ```bash
 python3 --version
@@ -181,57 +174,55 @@ npm --version
 wrangler --version
 ```
 
-如果你主要在 iPhone/iPad 上测试，额外建议确认：
+If you test mainly on iPhone/iPad, also confirm AAC availability:
 
 ```bash
 ffmpeg -codecs | rg aac
 ```
 
-只要 `aac` 编码可用，流水线就能正常为 iOS 生成 `m4a`。
-
-## 推荐执行方式
+## Recommended Execution
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.codex/memories/.config"
-python3 rpgmaker_web_port.py <项目名> --source ./Game
+python3 rpgmaker_web_port.py <project-name> --source ./Game
 ```
 
-默认是普通静态部署，不启用 KV 访问验证。
+Default behavior is static deployment without KV auth.
 
-默认部署目标是 Cloudflare Pages。也可以选择其他部署目标：
+Supported deployment targets:
 
 ```bash
-python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target cloudflare
-python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target local --output-dir ./dist/<项目名>
-python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target local --serve-local --local-port 8080
-python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
-python3 rpgmaker_web_port.py <项目名> --source ./Game --deploy-target none
+python3 rpgmaker_web_port.py <project-name> --source ./Game --deploy-target cloudflare
+python3 rpgmaker_web_port.py <project-name> --source ./Game --deploy-target local --output-dir ./dist/<project-name>
+python3 rpgmaker_web_port.py <project-name> --source ./Game --deploy-target local --serve-local --local-port 8080
+python3 rpgmaker_web_port.py <project-name> --source ./Game --deploy-target custom --custom-deploy-command 'rsync -av "$RPGMZ_WWW_DIR"/ user@host:/var/www/game/'
+python3 rpgmaker_web_port.py <project-name> --source ./Game --deploy-target none
 ```
 
-`custom` 部署命令会收到这些环境变量：
+`custom` deploy receives:
 
 - `RPGMZ_PROJECT_NAME`
 - `RPGMZ_WWW_DIR`
 - `RPGMZ_OUTPUT_DIR`
 - `RPGMZ_BASE_DIR`
 
-如果需要访问码验证页，使用：
+Enable KV auth page:
 
 ```bash
-python3 rpgmaker_web_port.py <项目名> --source ./Game --enable-kv-auth
+python3 rpgmaker_web_port.py <project-name> --source ./Game --enable-kv-auth
 ```
 
-如果 Cloudflare Pages 项目已经提前绑定好 `AUTH_CODES` 和 `ACCESS_SECRET_KEY`，可以使用：
+If the Cloudflare Pages project already binds `AUTH_CODES` and `ACCESS_SECRET_KEY`, you can use:
 
 ```bash
-python3 rpgmaker_web_port.py <项目名> --source ./Game --enable-kv-auth --single-deploy
+python3 rpgmaker_web_port.py <project-name> --source ./Game --enable-kv-auth --single-deploy
 ```
 
-访问验证页只应表述为技术探索模拟器，不应使用商业发行或类似表述。
+The access page should be presented as a technical exploration simulator, not as an official or commercial release.
 
-公开发布前不要提交商业游戏资源、私有游戏包、真实 Cloudflare 凭证、访问码数据库或生成后的构建产物。这个仓库只应包含工具链本身。
+Do not commit commercial game assets, private game packages, real Cloudflare credentials, auth-code databases, or generated build artifacts.
 
-默认部署分支是：
+Default deploy branch:
 
 ```bash
 production
