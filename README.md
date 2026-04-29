@@ -13,6 +13,12 @@ This project exists for a very specific pain:
 
 This is a PC-package-to-web pipeline for RPG Maker MV/MZ projects. It focuses on the practical conversion and compatibility steps needed before a desktop export can run reliably in a browser or WebView.
 
+## Feedback and Bug Reports
+
+If you deploy any RPG Maker MV/MZ game with this toolkit and hit a bug, please open an Issue.
+
+Include the game type, platform, and a short reproduction path when possible. I will review reports and try to ship fixes quickly.
+
 ## Why This Project Exists
 
 If you have ever tried to deploy an RPG Maker MV/MZ game as a web game, you have probably run into some combination of:
